@@ -66,6 +66,7 @@ if (command === 'status') {
   const host = { editor, server: await startServer(local), address: previous.address }; await saveState(host);
   if (command === 'restart') host.tunnel = previous.tunnel;
   else {
+    host.address = null;
     host.tunnel = launch(process.env.CLOUDFLARED_PATH || '/opt/homebrew/bin/cloudflared', ['tunnel', '--no-autoupdate', '--url', 'http://127.0.0.1:8796'], 'tunnel.log', local).pid; await saveState(host);
     for (let i = 0; i < 160; i++) {
       const log = await readFile(join(directory, 'tunnel.log'), 'utf8'), address = log.match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/)?.[0];
