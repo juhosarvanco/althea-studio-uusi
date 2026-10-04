@@ -1,0 +1,45 @@
+<div class="studio-bar" data-studio-chrome>
+  <a class="studio-brand" href="#alku">ALTHEA <span>Uuden version Studio</span></a>
+  <span id="studio-status" role="status" aria-live="polite">Yhdistetään…</span>
+  <div id="studio-people" aria-label="Osallistujat"></div>
+  <div class="studio-actions">
+    <button id="studio-mode" type="button">Esikatsele</button>
+    <button id="studio-images" type="button" aria-pressed="false">Kuvat</button>
+    <button id="studio-undo" type="button" aria-label="Peru oma tekstimuutos" title="Peru oma muutos valitussa tekstissä">↶</button>
+    <button id="studio-redo" type="button" aria-label="Tee oma tekstimuutos uudelleen" title="Tee uudelleen">↷</button>
+    <button id="studio-comments" type="button">Kommentit <span id="studio-comment-count">0</span></button>
+    <button id="studio-annotate" type="button" aria-pressed="false">Kommentoi aluetta</button>
+    <button id="studio-field-history" type="button" disabled title="Valitse ensin otsikko tai tekstikappale">Kohdan historia</button>
+    <button id="studio-history" type="button">Versiot</button>
+    <button id="studio-archive" type="button" hidden>Arkisto</button>
+    <button id="studio-publish" type="button" class="studio-primary">Julkaise</button>
+  </div>
+</div>
+<aside id="studio-sidebar" data-studio-chrome hidden>
+  <div class="studio-panel-heading"><h2 id="studio-panel-title">Kommentit</h2><button id="studio-close" type="button" aria-label="Sulje sivupaneeli">×</button></div>
+  <div id="studio-panel-content"></div>
+</aside>
+<dialog id="studio-gate" data-studio-chrome>
+  <p class="studio-kicker">ALTHEA / YHTEINEN TYÖTILA</p>
+  <h2>Muokataan yhdessä.</h2>
+  <p id="studio-gate-message">Kirjaudu omalla GitHub-tunnuksellasi. Muutokset tallentuvat yhteiseen työversioon.</p>
+  <button id="studio-login" class="studio-primary" type="button">Kirjaudu GitHubilla</button>
+  <div id="studio-login-step" hidden>
+    <p>GitHubin kertakäyttöinen vahvistuskoodi</p>
+    <p id="studio-login-code" class="studio-device-code"></p>
+    <a id="studio-login-open" class="studio-primary" href="https://github.com/login/device" target="_blank" rel="noopener">Avaa GitHub ja vahvista</a>
+    <button id="studio-login-cancel" type="button">Aloita uudelleen</button>
+  </div>
+  <p class="studio-login-note">Vain Juho ja Julia voivat muokata tätä työversiota.</p>
+  <a class="studio-back" href="../">Takaisin sivustolle</a>
+</dialog>
+<dialog id="studio-confirm" data-studio-chrome>
+  <h2 id="studio-confirm-title"></h2><p id="studio-confirm-message"></p>
+  <div class="studio-confirm-actions"><button id="studio-confirm-cancel" type="button">Peruuta</button><button id="studio-confirm-ok" type="button" class="studio-primary">Vahvista</button></div>
+</dialog>
+<div id="studio-toast" role="status" aria-live="polite" data-studio-chrome hidden></div>
+<div id="studio-archived-fields" data-studio-chrome hidden></div>
+<aside id="studio-archive-dock" data-studio-chrome hidden>
+  <p>Tämä alue poistettiin sivulta. Voit kirjoittaa tekstin loppuun; teksti ja muutokset säilyvät arkistossa.</p>
+  <div data-archive-editor></div><button id="studio-archive-close" type="button">Sulje tallennettu teksti</button>
+</aside>

@@ -1,0 +1,8 @@
+node_modules/
+.env
+.env.*
+.studio-data/
+.studio-live/
+site/studio/
+*.log
+.DS_Store

@@ -1,0 +1,49 @@
+{
+  "name": "althea-studio-uusi",
+  "version": "1.0.0",
+  "description": "Althean uusi sivustoversio ja erillinen reaaliaikainen Studio",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "build": "npm run build:studio",
+    "build:studio": "node tools/build-studio.mjs",
+    "studio:local": "npm run build:studio && STUDIO_DEV=1 STUDIO_PORT=8796 node studio/server.mjs",
+    "studio:start": "node tools/studio-host.mjs start",
+    "studio:status": "node tools/studio-host.mjs status",
+    "test": "node --test studio/tests/*.test.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/juhosarvanco/althea-studio-uusi.git"
+  },
+  "keywords": [],
+  "author": "",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/juhosarvanco/althea-studio-uusi/issues"
+  },
+  "homepage": "https://juhosarvanco.github.io/althea-studio-uusi/",
+  "dependencies": {
+    "@tiptap/core": "^3.31.4",
+    "@tiptap/extension-bold": "^3.31.4",
+    "@tiptap/extension-collaboration": "^3.31.4",
+    "@tiptap/extension-document": "^3.31.4",
+    "@tiptap/extension-hard-break": "^3.31.4",
+    "@tiptap/extension-italic": "^3.31.4",
+    "@tiptap/extension-link": "^3.31.4",
+    "@tiptap/extension-paragraph": "^3.31.4",
+    "@tiptap/extension-text": "^3.31.4",
+    "@tiptap/y-tiptap": "^3.0.9",
+    "lib0": "^0.2.119",
+    "linkedom": "^0.18.13",
+    "ws": "^8.22.0",
+    "y-protocols": "^1.0.7",
+    "y-websocket": "^3.1.0",
+    "yjs": "^13.6.33"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  },
+  "private": true
+}
