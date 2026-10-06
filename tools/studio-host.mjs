@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { randomBytes } from 'node:crypto';
 import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { studioReachable, waitForStudio } from './studio-health.mjs';
 const run = promisify(execFile);
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..'), directory = join(root, '.studio-live');
 const statePath = join(directory, 'host.json'), envPath = join(root, '.env.studio');
@@ -41,7 +42,7 @@ async function startServer(local) {
   const child = launch(process.execPath, [join(root, 'studio/server.mjs')], 'server.log', local);
   for (let i = 0; i < 80; i++) {
     if (!alive(child.pid)) throw new Error('Uusi palvelin ei käynnistynyt. Tarkista tämän repon .studio-live/server.log.');
-    try { if ((await fetch('http://127.0.0.1:8796/health')).ok) return child.pid; } catch {}
+    if (await studioReachable('http://127.0.0.1:8796', { timeoutMs: 1000 })) return child.pid;
     await pause();
   }
   throw new Error('Uusi palvelin ei vastaa.');
@@ -50,21 +51,24 @@ async function build(address) { await run(process.execPath, [join(root, 'tools/b
 const command = process.argv[2] || 'status';
 const previous = await state();
 if (command === 'status') {
-  console.log(JSON.stringify({ running: await owned(previous.server, 'server') && await owned(previous.tunnel, 'tunnel'), editor, server: previous.address || null }));
+  const localRunning = await owned(previous.server, 'server');
+  const remoteReachable = await owned(previous.tunnel, 'tunnel') && await studioReachable(previous.address);
+  console.log(JSON.stringify({ running: localRunning && remoteReachable, localRunning, remoteReachable, editor, server: previous.address || null }));
 } else if (command === 'stop') {
   await stop(previous); await saveState({ address: previous.address, editor }); console.log('Uuden Studion palvelin pysäytetty. Tallennetut sisällöt säilyvät.');
 } else if (command === 'start' || command === 'restart') {
   const local = await settings(); await chmod(envPath, 0o600);
-  if (command === 'start' && await owned(previous.server, 'server') && await owned(previous.tunnel, 'tunnel')) { console.log(`Uusi Studio on jo käynnissä: ${editor}`); process.exit(0); }
-  if (command === 'restart' && !await owned(previous.tunnel, 'tunnel')) throw new Error('Etäyhteys puuttuu. Käytä start-komentoa.');
-  await stop(previous, command === 'restart' ? ['server', 'awake'] : undefined);
+  const tunnelHealthy = await owned(previous.tunnel, 'tunnel') && await studioReachable(previous.address);
+  if (command === 'start' && await owned(previous.server, 'server') && tunnelHealthy) { console.log(`Uusi Studio on jo käynnissä: ${editor}`); process.exit(0); }
+  const keepTunnel = command === 'restart' && tunnelHealthy;
+  await stop(previous, keepTunnel ? ['server', 'awake'] : undefined);
   try {
     await mkdir(join(directory, 'backups'), { recursive: true, mode: 0o700 });
     await cp(join(directory, 'data'), join(directory, 'backups', new Date().toISOString().replace(/[:.]/g, '-')), { recursive: true });
   } catch (error) { if (error.code !== 'ENOENT') throw error; }
   await build(previous.address || 'http://127.0.0.1:8796');
   const host = { editor, server: await startServer(local), address: previous.address }; await saveState(host);
-  if (command === 'restart') host.tunnel = previous.tunnel;
+  if (keepTunnel) host.tunnel = previous.tunnel;
   else {
     host.address = null;
     host.tunnel = launch(process.env.CLOUDFLARED_PATH || '/opt/homebrew/bin/cloudflared', ['tunnel', '--no-autoupdate', '--url', 'http://127.0.0.1:8796'], 'tunnel.log', local).pid; await saveState(host);
@@ -76,7 +80,7 @@ if (command === 'status') {
     if (!host.address) throw new Error('Etäyhteyden osoitetta ei saatu.');
   }
   if (process.platform === 'darwin') host.awake = launch('/usr/bin/caffeinate', ['-i', '-w', String(host.server)], 'awake.log', local).pid;
-  await saveState(host); await build(host.address);
+  await saveState(host); await waitForStudio(host.address); await build(host.address);
   await run('gh', ['variable', 'set', 'STUDIO_SERVER_URL', '--repo', repository, '--body', host.address]);
   if (!process.argv.includes('--no-deploy')) await run('gh', ['workflow', 'run', 'pages.yml', '--repo', repository]);
   console.log(`Uusi Studio toimii omalla palvelimellaan: ${editor}`);

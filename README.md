@@ -60,6 +60,9 @@ npm run studio:status
 
 Palvelimen voi käynnistää myös tämän kansion `Käynnistä uusi Studio.command`-tiedostosta.
 Käynnistys päivittää uuden repon `STUDIO_SERVER_URL`-asetuksen ja julkaisee uuden yhteysosoitteen.
+Se tarkistaa myös, vastaako etäyhteys oikeasti. Koneen sammuttamisen tai lepotilan jälkeen
+vanhentunut yhteys uudistetaan automaattisesti käynnistyksen yhteydessä. GitHub Pagesin
+päivitys voi kestää muutaman minuutin; päivitä sen jälkeen selaimen Studio-sivu.
 Vanhan Studion palvelimeen tai Netlify-asetuksiin ei kosketa.
 
 ```sh

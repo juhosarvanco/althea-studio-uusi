@@ -10,7 +10,7 @@ import { diffWords } from './diff.mjs';
 import { reconcileLayout, startPageBehavior } from './live-layout.js';
 import { createAnnotationPicker, anchorFor, anchorElement, elementLabel, textRange } from './annotations.js';
 import { createMediaMode } from './media-client.js';
-import { studioConfiguration } from './config.js';
+import { studioConfiguration, connectionMessage } from './config.js';
 
 const $ = selector => document.querySelector(selector);
 const doc = new Y.Doc();
@@ -408,7 +408,7 @@ $('#studio-login').onclick = async () => {
       await start(); return;
     }
     if (sequence === loginSequence) throw new Error('Kirjautumispyyntö vanheni. Aloita uudelleen.');
-  } catch (error) { $('#studio-gate-message').textContent = error.message; }
+  } catch (error) { $('#studio-gate-message').textContent = connectionMessage(error); }
   finally { button.disabled = false; button.textContent = 'Kirjaudu GitHubilla'; }
 };
 $('#studio-login-cancel').onclick = () => { loginSequence++; $('#studio-login-step').hidden = true; $('#studio-login').disabled = false; $('#studio-login').textContent = 'Kirjaudu GitHubilla'; $('#studio-gate-message').textContent = 'Kirjaudu omalla GitHub-tunnuksellasi. Muutokset tallentuvat tähän erilliseen Studioon.'; };
@@ -445,7 +445,7 @@ async function start() {
       $('#studio-publish').textContent = 'Lataa sivu'; }
     setInterval(async () => { try { session = await getSession(); } catch { connected = false; provider.disconnect(); status(); $('#studio-gate-message').textContent = 'Kirjautuminen vanheni. Työversio säilyy palvelimella.'; $('#studio-gate').showModal(); } }, 10 * 60 * 1000);
   } catch (error) {
-    $('#studio-gate-message').textContent = error.status === 401 ? 'Kirjaudu omalla GitHub-tunnuksellasi. Muutokset tallentuvat tähän erilliseen Studioon.' : error.message;
+    $('#studio-gate-message').textContent = error.status === 401 ? 'Kirjaudu omalla GitHub-tunnuksellasi. Muutokset tallentuvat tähän erilliseen Studioon.' : connectionMessage(error);
     $('#studio-login').hidden = false;
     if (!$('#studio-gate').open) $('#studio-gate').showModal();
     $('#studio-status').textContent = 'Yhteiseditori odottaa kirjautumista';

@@ -1,5 +1,11 @@
 export const SITE_BASE = '/althea-studio-uusi/';
 
+export function connectionMessage(error) {
+  return ['TypeError', 'TimeoutError', 'AbortError'].includes(error?.name)
+    ? 'Yhteys Studion tallennuspalvelimeen ei onnistu. Jos Mac oli sammunut tai nukkumassa, käynnistä uusi Studio Macilla ja päivitä tämä sivu hetken kuluttua.'
+    : error.message;
+}
+
 export function sitePath(path = '') {
   return `${['localhost', '127.0.0.1'].includes(location.hostname) ? '/' : SITE_BASE}${path}`;
 }
