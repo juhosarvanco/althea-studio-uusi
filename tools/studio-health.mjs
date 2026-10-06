@@ -11,7 +11,7 @@ export async function studioReachable(address, { request = fetch, timeoutMs = 50
   } catch { return false; }
 }
 
-export async function waitForStudio(address, { timeoutMs = 30000 } = {}) {
+export async function waitForStudio(address, { timeoutMs = 90000 } = {}) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (await studioReachable(address, { timeoutMs: Math.min(5000, deadline - Date.now()) })) return;

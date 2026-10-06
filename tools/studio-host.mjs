@@ -48,6 +48,11 @@ async function startServer(local) {
   throw new Error('Uusi palvelin ei vastaa.');
 }
 async function build(address) { await run(process.execPath, [join(root, 'tools/build-studio.mjs')], { cwd: root, env: { ...process.env, STUDIO_SERVER_URL: address }, maxBuffer: 2 * 1024 * 1024 }); }
+async function publishConnection(host) {
+  await build(host.address);
+  await run('gh', ['variable', 'set', 'STUDIO_SERVER_URL', '--repo', repository, '--body', host.address]);
+  if (!process.argv.includes('--no-deploy')) await run('gh', ['workflow', 'run', 'pages.yml', '--repo', repository]);
+}
 const command = process.argv[2] || 'status';
 const previous = await state();
 if (command === 'status') {
@@ -59,7 +64,12 @@ if (command === 'status') {
 } else if (command === 'start' || command === 'restart') {
   const local = await settings(); await chmod(envPath, 0o600);
   const tunnelHealthy = await owned(previous.tunnel, 'tunnel') && await studioReachable(previous.address);
-  if (command === 'start' && await owned(previous.server, 'server') && tunnelHealthy) { console.log(`Uusi Studio on jo käynnissä: ${editor}`); process.exit(0); }
+  if (command === 'start' && await owned(previous.server, 'server') && tunnelHealthy) {
+    // A prior attempt may have started the tunnel but failed before updating Pages.
+    // Retrying must finish the connection update without restarting a healthy server.
+    await publishConnection(previous);
+    console.log(`Uusi Studio on käynnissä ja yhteysosoite päivitetty: ${editor}`); process.exit(0);
+  }
   const keepTunnel = command === 'restart' && tunnelHealthy;
   await stop(previous, keepTunnel ? ['server', 'awake'] : undefined);
   try {
@@ -80,8 +90,6 @@ if (command === 'status') {
     if (!host.address) throw new Error('Etäyhteyden osoitetta ei saatu.');
   }
   if (process.platform === 'darwin') host.awake = launch('/usr/bin/caffeinate', ['-i', '-w', String(host.server)], 'awake.log', local).pid;
-  await saveState(host); await waitForStudio(host.address); await build(host.address);
-  await run('gh', ['variable', 'set', 'STUDIO_SERVER_URL', '--repo', repository, '--body', host.address]);
-  if (!process.argv.includes('--no-deploy')) await run('gh', ['workflow', 'run', 'pages.yml', '--repo', repository]);
+  await saveState(host); await waitForStudio(host.address); await publishConnection(host);
   console.log(`Uusi Studio toimii omalla palvelimellaan: ${editor}`);
 } else throw new Error('Käytä start, restart, stop tai status.');
