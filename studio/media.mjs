@@ -64,28 +64,43 @@ export class MediaLibrary {
     }
     this.save();
   }
-  save() { atomic(this.indexPath, JSON.stringify(this.entries)); }
-  list() { return this.entries.map(entry => ({ ...entry })); }
-  get(id) {
+  save(entries = this.entries) { atomic(this.indexPath, JSON.stringify(entries)); this.entries = entries; }
+  list(deleted = false) { return this.entries.filter(entry => Boolean(entry.deletedAt) === deleted).map(entry => ({ ...entry })); }
+  get(id, includeDeleted = false) {
     if (typeof id !== 'string' || !/^[a-f0-9]{64}$/.test(id)) fail('Kuvaa ei löydy.', 404);
     const entry = this.entries.find(item => item.id === id);
     if (!entry) fail('Kuvaa ei löydy.', 404);
+    if (entry.deletedAt && !includeDeleted) fail('Kuva on poistettu kuvapankista. Palauta se ensin Poistetut kuvat -listasta.', 409);
     return entry;
   }
   read(id) {
-    const entry = this.get(id);
+    const entry = this.get(id, true);
     return readFileSync(entry.uploaded ? join(this.directory, `${entry.id}.webp`) : join(this.site, entry.path));
+  }
+  remove(id, actor) {
+    const entry = this.get(id, true);
+    if (entry.deletedAt) return { ok: true, unchanged: true };
+    this.save(this.entries.map(item => item.id === id
+      ? { ...item, deletedAt: new Date().toISOString(), deletedBy: actor.name || actor.sub } : item));
+    return { ok: true };
+  }
+  restore(id) {
+    const entry = this.get(id, true);
+    if (!entry.deletedAt) return { entry: { ...entry }, unchanged: true };
+    const restored = { ...entry, deletedAt: null, deletedBy: null };
+    this.save(this.entries.map(item => item.id === id ? restored : item));
+    return { entry: { ...restored } };
   }
   upload(bytes, name, actor) {
     const dimensions = webpSize(bytes), id = digest(bytes), existing = this.entries.find(entry => entry.id === id);
-    if (existing) return { entry: existing, duplicate: true };
+    if (existing) return { ...this.restore(id), duplicate: true };
     if (this.entries.length >= 200 || this.entries.filter(entry => entry.uploaded).reduce((sum, entry) => sum + entry.bytes, 0) + bytes.length > 200 * 1024 * 1024)
       fail('Kuvapankin tallennustila on täynnä.', 413);
     const entry = { id, path: `assets/img/studio-${id}.webp`, name: basename(String(name || 'Uusi kuva')).slice(0, 100),
       alt: '', bytes: bytes.length, ...dimensions, uploaded: true, author: actor.name || actor.sub,
       createdAt: new Date().toISOString() };
     atomic(join(this.directory, `${id}.webp`), bytes);
-    this.entries.push(entry); this.save(); return { entry, duplicate: false };
+    this.save([...this.entries, entry]); return { entry, duplicate: false };
   }
   publicationAssets(html) {
     const { document } = parseHTML(html);
@@ -95,6 +110,34 @@ export class MediaLibrary {
       fail('Julkaisuun valittujen uusien kuvien koko ylittää 5 Mt. Käytä pienempiä kuvia.', 413);
     return entries.map(entry => ({ path: entry.path, digest: entry.id, content: this.read(entry.id).toString('base64') }));
   }
+}
+
+function usedImagePaths(layout) {
+  const { document } = parseHTML(layout.template), paths = new Set();
+  for (const node of document.querySelectorAll('[src]')) paths.add(cleanPath(node.getAttribute('src')));
+  for (const node of document.querySelectorAll('[srcset]')) {
+    for (const source of node.getAttribute('srcset').split(',')) paths.add(cleanPath(source.trim().split(/\s+/)[0]));
+  }
+  for (const node of document.querySelectorAll('style,[style]')) {
+    const css = node.tagName === 'STYLE' ? node.textContent : node.getAttribute('style');
+    for (const match of css.matchAll(/url\(\s*['"]?([^\s'"()]+)['"]?\s*\)/g)) paths.add(cleanPath(match[1]));
+  }
+  return paths;
+}
+
+export function mediaView(library, layout) {
+  const paths = usedImagePaths(layout);
+  return { images: library.list().map(entry => ({ ...entry, inUse: paths.has(entry.path) })),
+    deletedImages: library.list(true), slots: imageSlots(layout) };
+}
+
+export function removeImage(store, library, body, actor) {
+  const entry = library.get(body.mediaId, true);
+  // Recheck current shared markup, including a picture chosen by another editor
+  // since this person's image bank was last refreshed. Files stay recoverable.
+  if (usedImagePaths(store.layout).has(entry.path))
+    fail('Kuva on käytössä sivulla. Vaihda sen tilalle toinen kuva ennen poistamista.', 409);
+  return library.remove(entry.id, actor);
 }
 
 function imageState(image) {

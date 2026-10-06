@@ -10,7 +10,7 @@ import * as sync from 'y-protocols/sync';
 import * as awareness from 'y-protocols/awareness';
 import { StudioStore, vector } from './store.mjs';
 import { issueStudioToken, verifyStudioToken } from '../shared/studio-token.mjs';
-import { MediaLibrary, MAX_IMAGE_BYTES, imageSlots, changeImage } from './media.mjs';
+import { MediaLibrary, MAX_IMAGE_BYTES, mediaView, changeImage, removeImage } from './media.mjs';
 import { GithubLogin } from './auth.mjs';
 import { GithubPublisher } from './publish.mjs';
 
@@ -111,7 +111,7 @@ export async function createStudioServer(options = {}) {
           if (!acceptedOrigins.has(req.headers.origin)) return response(req, res, 403, { error: 'Origin not allowed' });
           return response(req, res, 200, await publisher.publish(await readBody(req), user));
         }
-        if (req.method === 'GET' && url.pathname === '/api/media') return response(req, res, 200, { images: media.list(), slots: imageSlots(store.layout) });
+        if (req.method === 'GET' && url.pathname === '/api/media') return response(req, res, 200, mediaView(media, store.layout));
         if (req.method === 'GET' && url.pathname.startsWith('/api/media-file/'))
           return response(req, res, 200, media.read(url.pathname.slice('/api/media-file/'.length)), { 'content-type': 'image/webp', 'content-security-policy': "default-src 'none'" });
         if (req.method === 'POST' && url.pathname === '/api/media-upload') {
@@ -129,6 +129,11 @@ export async function createStudioServer(options = {}) {
         }
         if (localLayout && req.method === 'GET') return response(req, res, 200, store.export());
         if (localLayout && req.method === 'POST') return response(req, res, 200, store.applyLayout(body.html, body.layoutHash, user));
+        if (req.method === 'POST' && ['/api/media-delete', '/api/media-restore'].includes(url.pathname)) {
+          const result = url.pathname === '/api/media-delete' ? removeImage(store, media, body, user) : media.restore(body.mediaId);
+          for (const socket of mediaSubscribers) if (socket.readyState === 1) socket.send(packet(6, new Uint8Array()));
+          return response(req, res, 200, result);
+        }
         if (req.method === 'POST' && url.pathname === '/api/media-assign') return response(req, res, 200, changeImage(store, media, body, user));
         if (req.method === 'GET' && url.pathname === '/api/layout') return response(req, res, 200, store.layoutView());
         if (req.method === 'GET' && url.pathname === '/api/versions') return response(req, res, 200, { versions: store.versions() });

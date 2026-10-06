@@ -21,7 +21,7 @@ let layout = null, pendingLayout = null, layoutRequest = 0, composing = false, r
 let annotating = false, showResolvedComments = false, commentDraft = '', selectedCommentKey = '';
 const mediaMode = createMediaMode({ api, getSession: () => session, getHeading: id => editors.get(id)?.getText(),
   container: document.querySelector('#studio-panel-content'), toast: message => toast(message), isConnected: () => connected,
-  onApplied: () => refreshLayout() });
+  onApplied: () => refreshLayout(), confirmAction: confirmation });
 const refreshPageBehavior = startPageBehavior();
 const stateVector = () => btoa(String.fromCharCode(...Y.encodeSnapshot(Y.snapshot(doc))));
 const durable = () => connected && provider?.synced && persisted === stateVector()

@@ -89,3 +89,65 @@ test('image validator rejects oversized dimensions, animation and truncated or e
   assert.throws(() => webpSize(Buffer.from('<svg/>')), /kelvollinen/);
   const executable = Buffer.from(picture); executable.write('EXIF', 12); assert.throws(() => webpSize(executable), /ei tueta/);
 });
+
+test('image removal is shared and recoverable, protects current use, and preserves text and history through restart', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'althea-media-delete-'));
+  const options = { port: 0, secret: 'studio-media-test-secret-over-thirty-two', allowed: ['juho', 'julia'], origins: ['https://editor.example'], login: { check() {} }, dataDir: directory };
+  let server = await createStudioServer(options), base = `http://127.0.0.1:${server.port}`;
+  t.after(async () => { await server.close(); await rm(directory, { recursive: true }); });
+  const headers = { authorization: `Bearer ${issueStudioToken({ login: 'julia', name: 'Julia' }, options.secret)}`, origin: options.origins[0] };
+  const get = async path => (await fetch(base + path, { headers })).json();
+  const post = (path, body) => fetch(base + path, { method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const bank = await get('/api/media'), original = bank.images.find(image => bank.slots.some(slot => slot.src === image.path));
+  const uploaded = await fetch(base + '/api/media-upload?name=Poiston-testikuva.png', { method: 'POST', headers, body: picture });
+  const { entry } = await uploaded.json();
+  const field = server.store.manifest.fields[0].id;
+  const candidate = new Y.Doc(); Y.applyUpdate(candidate, Y.encodeStateAsUpdate(server.store.doc));
+  const text = candidate.getXmlFragment(field).get(0).get(0); text.insert(text.length, ' Samanaikainen tekstimuutos.');
+  candidate.getMap('comments').set('delete-comment', { fieldId: field, body: 'Kommentti säilyy.', author: 'Julia', createdAt: new Date().toISOString(), resolved: false });
+  server.store.apply(Y.encodeStateAsUpdate(candidate, Y.encodeStateVector(server.store.doc)), null, { sub: 'julia', name: 'Julia' }); candidate.destroy();
+  const fields = JSON.stringify(server.store.fields()), history = server.store.fieldHistory(field);
+  assert.equal((await fetch(base + '/api/media-delete', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mediaId: entry.id }) })).status, 401);
+  assert.equal((await fetch(base + '/api/media-delete', { method: 'POST', headers: { ...headers, origin: 'https://other.example' }, body: JSON.stringify({ mediaId: entry.id }) })).status, 403);
+  assert.equal((await post('/api/media-delete', { mediaId: '../../secret' })).status, 404);
+  assert.equal((await post('/api/media-restore', { mediaId: '0'.repeat(64) })).status, 404);
+  assert.equal((await post('/api/media-delete', { mediaId: original.id })).status, 409);
+  const socket = new WebSocket(base.replace('http', 'ws') + '/sync/althea-uusi', ['althea-auth.' + issueStudioToken({ login: 'juho', name: 'Juho' }, options.secret)], { origin: options.origins[0] });
+  await new Promise((resolve, reject) => { socket.once('open', resolve); socket.once('error', reject); });
+  t.after(() => socket.terminate());
+  socket.send(Buffer.from([6]));
+  const notice = new Promise(resolve => socket.on('message', bytes => { if (bytes[0] === 6) resolve(); }));
+  assert.equal((await post('/api/media-delete', { mediaId: entry.id })).status, 200);
+  await Promise.race([notice, new Promise((_, reject) => { const timeout = setTimeout(() => reject(new Error('Missing image removal notification')), 3000); timeout.unref(); })]);
+  socket.close();
+  let next = await get('/api/media');
+  assert.equal(next.images.length, bank.images.length); assert.equal(next.deletedImages.length, 1);
+  assert.equal(next.deletedImages[0].deletedBy, 'Julia');
+  const slot = bank.slots[0], assignment = { nodeId: slot.id, imageHash: slot.imageHash, mediaId: entry.id, alt: 'Testikuva', position: '50% 50%' };
+  assert.equal((await post('/api/media-assign', assignment)).status, 409);
+  assert.deepEqual(Buffer.from(await (await fetch(base + '/api/media-file/' + entry.id, { headers })).arrayBuffer()), picture);
+  assert.equal((await post('/api/media-restore', { mediaId: entry.id })).status, 200);
+  assert.equal((await post('/api/media-assign', assignment)).status, 200);
+  // A stale bank view cannot delete an image another editor just put on the page.
+  assert.equal((await post('/api/media-delete', { mediaId: entry.id })).status, 409);
+  next = await get('/api/media'); assert.equal(next.images.find(image => image.id === entry.id).inUse, true);
+  const currentSlot = next.slots.find(item => item.id === slot.id), priorImage = bank.images.find(image => image.path === slot.src);
+  assert.equal((await post('/api/media-assign', { ...assignment, imageHash: currentSlot.imageHash, mediaId: priorImage.id })).status, 200);
+  assert.equal((await post('/api/media-delete', { mediaId: entry.id })).status, 200);
+  await server.close(); server = await createStudioServer(options); base = `http://127.0.0.1:${server.port}`;
+  next = await get('/api/media'); assert.equal(next.deletedImages.length, 1); assert.equal(next.images.some(image => image.id === entry.id), false);
+  assert.equal(JSON.stringify(server.store.fields()), fields); assert.deepEqual(server.store.fieldHistory(field), history);
+  assert.equal(server.store.comments.get('delete-comment').body, 'Kommentti säilyy.');
+  assert.equal((await post('/api/media-restore', { mediaId: entry.id })).status, 200);
+  // Original site assets are removable too; their tombstones survive template scans.
+  next = await get('/api/media');
+  for (const used of next.slots.filter(item => item.src === original.path)) {
+    assert.equal((await post('/api/media-assign', { nodeId: used.id, imageHash: used.imageHash, mediaId: entry.id, alt: used.alt, position: used.position })).status, 200);
+  }
+  assert.equal((await post('/api/media-delete', { mediaId: original.id })).status, 200);
+  await server.close(); server = await createStudioServer(options); base = `http://127.0.0.1:${server.port}`;
+  next = await get('/api/media'); assert.equal(next.images.some(image => image.id === original.id), false);
+  assert.equal(next.deletedImages.some(image => image.id === original.id), true);
+  assert.equal((await post('/api/media-restore', { mediaId: original.id })).status, 200);
+  assert.equal(JSON.stringify(server.store.fields()), fields); assert.deepEqual(server.store.fieldHistory(field), history);
+});

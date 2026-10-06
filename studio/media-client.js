@@ -1,7 +1,7 @@
 import { sitePath } from './config.js';
 
-export function createMediaMode({ api, getSession, getHeading, container, toast, isConnected, onApplied }) {
-  let enabled = false, images = [], slots = [], selected = null, draft = null, busy = false, request = 0;
+export function createMediaMode({ api, getSession, getHeading, container, toast, isConnected, onApplied, confirmAction }) {
+  let enabled = false, images = [], deletedImages = [], slots = [], selected = null, draft = null, busy = false, request = 0, showDeleted = false;
   const urls = new Map(), resolvedURLs = new Map();
   const el = (tag, text, className) => { const node = document.createElement(tag); if (text !== undefined) node.textContent = text; if (className) node.className = className; return node; };
   const button = (text, action, className) => { const node = el('button', text, className); node.type = 'button'; node.onclick = action; return node; };
@@ -54,7 +54,11 @@ export function createMediaMode({ api, getSession, getHeading, container, toast,
     const id = ++request;
     const result = await api('/api/media');
     if (id !== request) return;
-    images = result.images; slots = result.slots;
+    images = result.images; deletedImages = result.deletedImages || []; slots = result.slots;
+    if (draft?.mediaId && !images.some(image => image.id === draft.mediaId)) {
+      draft.mediaId = images.find(image => image.path === normalize(current()?.src))?.id || null;
+      if (enabled && !busy) toast('Valitsemasi kuva poistettiin kuvapankista. Voit valita toisen kuvan tai palauttaa sen Poistetut kuvat -listasta.');
+    }
     if (!selected && slots.length) choose(slots[0].id, false);
     await hydrate();
     const typing = container.contains(document.activeElement) && document.activeElement.matches('input,textarea,select');
@@ -101,6 +105,26 @@ export function createMediaMode({ api, getSession, getHeading, container, toast,
       }
       throw new Error(`${file.name}: kuvan valmistelu epäonnistui.`);
     } finally { bitmap.close(); }
+  }
+  async function remove(image) {
+    if (busy || !isConnected()) return;
+    if (!await confirmAction('Poistetaanko kuva kuvapankista?', `Kuva ”${image.name}” siirretään Poistetut kuvat -listaan. Voit palauttaa sen myöhemmin.`, 'Poista kuva')) return;
+    busy = true; render();
+    try {
+      await api('/api/media-delete', { mediaId: image.id });
+      await refresh();
+      toast('Kuva poistettu kuvapankista. Voit palauttaa sen Poistetut kuvat -listasta.');
+    } catch (error) { toast(error.message); await refresh().catch(() => {}); }
+    finally { busy = false; if (enabled) render(); }
+  }
+  async function restore(image) {
+    if (busy || !isConnected()) return;
+    busy = true; render();
+    try {
+      await api('/api/media-restore', { mediaId: image.id });
+      await refresh(); toast('Kuva palautettu yhteiseen kuvapankkiin.');
+    } catch (error) { toast(error.message); await refresh().catch(() => {}); }
+    finally { busy = false; if (enabled) render(); }
   }
   async function upload(files) {
     if (!files.length || busy) return;
@@ -153,18 +177,31 @@ export function createMediaMode({ api, getSession, getHeading, container, toast,
       const apply = button(busy ? 'Odota…' : 'Käytä tässä kohdassa', save, 'studio-primary'); apply.disabled = busy || !chosen || !isConnected() || slot.imageHash !== draft.imageHash;
       fragment.append(apply, el('p', 'Kuvan vaihto näkyy molemmille heti. Julkinen sivu päivittyy Julkaise-painikkeella.', 'studio-history-note studio-media-note'));
     }
-    const heading = el('div', undefined, 'studio-media-heading'); heading.append(el('h3', `Kuvapankki (${images.length})`)); fragment.append(heading);
-    const uploadLabel = el('label', busy ? 'Lisätään kuvia…' : '+ Lisää kuvia', 'studio-media-upload');
-    const input = el('input'); input.type = 'file'; input.multiple = true; input.accept = 'image/jpeg,image/png,image/webp,image/avif'; input.disabled = busy; input.setAttribute('aria-label', 'Lisää kuvia kuvapankkiin');
-    input.onchange = () => upload([...input.files]); uploadLabel.append(input); fragment.append(uploadLabel);
-    fragment.append(el('p', 'JPG, PNG, WebP tai AVIF · enintään 20 Mt / alkuperäinen kuva. Kuvat valmistellaan automaattisesti sivustolle.', 'studio-history-note'));
+    const heading = el('div', undefined, 'studio-media-heading'); heading.append(el('h3', showDeleted ? `Poistetut kuvat (${deletedImages.length})` : `Kuvapankki (${images.length})`)); fragment.append(heading);
+    const toggle = button(showDeleted ? 'Takaisin kuvapankkiin' : `Poistetut kuvat (${deletedImages.length})`, () => { showDeleted = !showDeleted; render(); });
+    toggle.disabled = busy; fragment.append(toggle);
+    if (!showDeleted) {
+      const uploadLabel = el('label', busy ? 'Lisätään kuvia…' : '+ Lisää kuvia', 'studio-media-upload');
+      const input = el('input'); input.type = 'file'; input.multiple = true; input.accept = 'image/jpeg,image/png,image/webp,image/avif'; input.disabled = busy; input.setAttribute('aria-label', 'Lisää kuvia kuvapankkiin');
+      input.onchange = () => upload([...input.files]); uploadLabel.append(input); fragment.append(uploadLabel);
+      fragment.append(el('p', 'JPG, PNG, WebP tai AVIF · enintään 20 Mt / alkuperäinen kuva. Kuvat valmistellaan automaattisesti sivustolle.', 'studio-history-note'));
+      fragment.append(el('p', 'Sivulla käytössä olevan kuvan voi poistaa, kun sen tilalle on valittu toinen kuva.', 'studio-history-note'));
+    } else fragment.append(el('p', 'Poistetut kuvat säilyvät täällä palautettavina. Kuvien poistaminen näkyy heti molemmille muokkaajille.', 'studio-history-note'));
     const grid = el('div', undefined, 'studio-media-grid');
-    for (const image of [...images].reverse()) {
-      const tile = button('', () => { draft.mediaId = image.id; if (!draft.alt) draft.alt = image.alt; render(); }, 'studio-media-tile');
-      tile.disabled = busy || !draft; tile.setAttribute('aria-pressed', String(image.id === draft?.mediaId));
+    for (const image of [...(showDeleted ? deletedImages : images)].reverse()) {
+      const card = el('article', undefined, 'studio-media-card'); card.dataset.mediaId = image.id;
+      const tile = showDeleted ? el('div', undefined, 'studio-media-tile') : button('', () => { draft.mediaId = image.id; if (!draft.alt) draft.alt = image.alt; render(); }, 'studio-media-tile');
+      if (!showDeleted) { tile.disabled = busy || !draft; tile.setAttribute('aria-pressed', String(image.id === draft?.mediaId)); tile.setAttribute('aria-label', `Valitse kuva: ${image.name}`); }
       const thumbnail = el('img'); thumbnail.loading = 'lazy'; thumbnail.alt = ''; tile.append(thumbnail, el('span', image.name));
-      tile.setAttribute('aria-label', `Valitse kuva: ${image.name}`); grid.append(tile); loadPreview(thumbnail, image);
+      card.append(tile); loadPreview(thumbnail, image);
+      if (!showDeleted && image.inUse) card.append(el('small', 'Käytössä sivulla', 'studio-media-used'));
+      const action = button(showDeleted ? 'Palauta' : 'Poista', () => showDeleted ? restore(image) : remove(image), 'studio-media-action');
+      action.setAttribute('aria-label', `${showDeleted ? 'Palauta kuva' : 'Poista kuva'}: ${image.name}`);
+      action.disabled = busy || !isConnected() || !showDeleted && image.inUse;
+      if (!showDeleted && image.inUse) action.title = 'Vaihda kuvan tilalle toinen kuva ennen poistamista.';
+      card.append(action); grid.append(card);
     }
+    if (!grid.children.length) fragment.append(el('p', showDeleted ? 'Ei poistettuja kuvia.' : 'Kuvapankki on tyhjä. Lisää ensimmäinen kuva.', 'studio-history-note'));
     fragment.append(grid); container.replaceChildren(fragment);
   }
   document.addEventListener('click', event => {
