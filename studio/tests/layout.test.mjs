@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm, appendFile, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { createHash } from 'node:crypto';
 import * as Y from 'yjs';
 import WS from 'ws';
 import { WebsocketProvider } from 'y-websocket';
@@ -30,6 +31,37 @@ function client(server, login) {
 const text = (doc, id) => doc.getXmlFragment(id).get(0).get(0);
 const plain = (doc, id) => doc.getXmlFragment(id).toString();
 const source = '<html lang="fi"><head><style>p{color:#333}</style></head><body><main><section id="one"><h2>Ensimmäinen</h2><p>Alkuperäinen teksti.</p><p>Poistettava teksti.</p></section><section id="two"><h2>Toinen</h2><p>Toinen teksti.</p></section></main><footer><p>Alatunniste</p></footer></body></html>';
+
+test('restart from the known publication preserves newer image choices, shared text and history while rejecting unrelated file changes', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'althea-published-layout-'));
+  const prepared = prepareTemplate(source.replace('</main>', '<img src="assets/img/original.webp"></main>'));
+  let store = new StudioStore(directory, prepared.manifest, prepared.template);
+  t.after(async () => { store.close(); await rm(directory, { recursive: true, force: true }); });
+  const actor = { sub: 'julia', name: 'Julia' }, id = 'one-p-1';
+  const page = parseHTML(store.export().html).document;
+  page.querySelector('img').setAttribute('src', 'assets/img/published.webp');
+  store.applyLayout(page.documentElement.outerHTML, store.manifest.layoutHash, actor);
+  const publishedHTML = store.export().html, published = prepareTemplate(publishedHTML);
+  store.published(prepared.manifest.sourceHash, createHash('sha256').update(publishedHTML).digest('hex'));
+  // Further image and text edits remain in the shared draft after publication.
+  page.querySelector('img').setAttribute('src', 'assets/img/newer-shared.webp');
+  store.applyLayout(page.documentElement.outerHTML, store.manifest.layoutHash, actor);
+  const candidate = new Y.Doc(); Y.applyUpdate(candidate, Y.encodeStateAsUpdate(store.doc));
+  text(candidate, id).insert(0, 'Julian uusin teksti. ');
+  candidate.getMap('comments').set('image-context', { fieldId: id, body: 'Kommentti säilyy', author: 'Julia', createdAt: new Date().toISOString(), resolved: false });
+  store.apply(Y.encodeStateAsUpdate(candidate, Y.encodeStateVector(store.doc)), null, actor); candidate.destroy();
+  const before = store.export(), fields = JSON.stringify(store.fields()), history = store.fieldHistory(id);
+  assert.notEqual(published.manifest.layoutHash, store.layout.bootstrapHash);
+  assert.notEqual(published.manifest.layoutHash, store.manifest.layoutHash);
+  store.close(); store = new StudioStore(directory, published.manifest, published.template);
+  assert.deepEqual(store.export(), before); assert.equal(JSON.stringify(store.fields()), fields);
+  assert.deepEqual(store.fieldHistory(id), history); assert.ok(store.comments.has('image-context'));
+  store.close();
+  const journal = await readFile(join(directory, 'updates.bin'));
+  const unrelated = prepareTemplate(publishedHTML.replace('published.webp', 'outside.webp'));
+  assert.throws(() => new StudioStore(directory, unrelated.manifest, unrelated.template), /Site layout changed/);
+  assert.deepEqual(await readFile(join(directory, 'updates.bin')), journal);
+});
 
 test('live layout moves stable fields, seeds new fields once and archives removed fields with their history and late edits', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'althea-live-layout-'));

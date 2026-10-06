@@ -9,6 +9,7 @@ import { schema, inlineHTML } from './schema.mjs';
 import { FieldHistory, fieldHash } from './history.mjs';
 import { EventEmitter } from 'node:events';
 import { initialLayout, nextLayout, layoutView, withTargets } from './layout.mjs';
+import { layoutHash } from './template.mjs';
 
 // A state vector alone misses deletion-only changes. A snapshot also encodes
 // the canonical delete set, so durability and stale-action checks cover both.
@@ -66,7 +67,12 @@ export class StudioStore extends EventEmitter {
       }
       // A persisted live layout is authoritative. A newly published matching
       // template may bootstrap future builds; unrelated file edits are rejected.
-      if (![this.layout.bootstrapHash, this.layout.manifest.layoutHash].includes(manifest.layoutHash))
+      // After publication, further image choices may change the live layout.
+      // The exact last published source is still a trusted bootstrap; keep the
+      // newer shared layout instead of replacing it with that older source.
+      const knownPublication = manifest.sourceHash === this.doc.getMap('meta').get('publicHash')
+        && layoutHash(template) === manifest.layoutHash;
+      if (!knownPublication && ![this.layout.bootstrapHash, this.layout.manifest.layoutHash].includes(manifest.layoutHash))
         throw new Error('Site layout changed. Migrate shared fields before restarting; saved content has been preserved.');
       this.layout.bootstrapHash = manifest.layoutHash;
       this.useLayout(this.layout);
