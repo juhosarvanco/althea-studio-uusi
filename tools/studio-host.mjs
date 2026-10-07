@@ -23,7 +23,7 @@ async function owned(pid, kind) {
 }
 async function stop(host, kinds = ['server', 'tunnel', 'awake']) {
   for (const kind of kinds) if (await owned(host[kind], kind)) process.kill(host[kind], 'SIGTERM');
-  for (let i = 0; i < 80 && await owned(host.server, 'server'); i++) await pause();
+  if (kinds.includes('server')) for (let i = 0; i < 80 && await owned(host.server, 'server'); i++) await pause();
 }
 async function settings() {
   try { return parseEnv(await readFile(envPath, 'utf8')); }
@@ -56,7 +56,7 @@ async function publishConnection(host) {
 const command = process.argv[2] || 'status';
 const previous = await state();
 if (command === 'status') {
-  const localRunning = await owned(previous.server, 'server');
+  const localRunning = await owned(previous.server, 'server') && await studioReachable('http://127.0.0.1:8796');
   const remoteReachable = await owned(previous.tunnel, 'tunnel') && await studioReachable(previous.address);
   console.log(JSON.stringify({ running: localRunning && remoteReachable, localRunning, remoteReachable, editor, server: previous.address || null }));
 } else if (command === 'stop') {
@@ -64,24 +64,27 @@ if (command === 'status') {
 } else if (command === 'start' || command === 'restart') {
   const local = await settings(); await chmod(envPath, 0o600);
   const tunnelHealthy = await owned(previous.tunnel, 'tunnel') && await studioReachable(previous.address);
-  if (command === 'start' && await owned(previous.server, 'server') && tunnelHealthy) {
+  const serverHealthy = await owned(previous.server, 'server') && await studioReachable('http://127.0.0.1:8796');
+  if (command === 'start' && serverHealthy && tunnelHealthy) {
     // A prior attempt may have started the tunnel but failed before updating Pages.
     // Retrying must finish the connection update without restarting a healthy server.
     await publishConnection(previous);
     console.log(`Uusi Studio on käynnissä ja yhteysosoite päivitetty: ${editor}`); process.exit(0);
   }
-  const keepTunnel = command === 'restart' && tunnelHealthy;
-  await stop(previous, keepTunnel ? ['server', 'awake'] : undefined);
+  const keepServer = command === 'start' && serverHealthy;
+  const keepTunnel = tunnelHealthy;
+  await stop(previous, [...(keepServer ? [] : ['server', 'awake']), ...(keepTunnel ? [] : ['tunnel'])]);
   try {
     await mkdir(join(directory, 'backups'), { recursive: true, mode: 0o700 });
-    await cp(join(directory, 'data'), join(directory, 'backups', new Date().toISOString().replace(/[:.]/g, '-')), { recursive: true });
+    if (!keepServer) await cp(join(directory, 'data'), join(directory, 'backups', new Date().toISOString().replace(/[:.]/g, '-')), { recursive: true });
   } catch (error) { if (error.code !== 'ENOENT') throw error; }
   await build(previous.address || 'http://127.0.0.1:8796');
-  const host = { editor, server: await startServer(local), address: previous.address }; await saveState(host);
+  const host = { editor, server: keepServer ? previous.server : await startServer(local), address: previous.address }; await saveState(host);
   if (keepTunnel) host.tunnel = previous.tunnel;
   else {
     host.address = null;
-    host.tunnel = launch(process.env.CLOUDFLARED_PATH || '/opt/homebrew/bin/cloudflared', ['tunnel', '--no-autoupdate', '--url', 'http://127.0.0.1:8796'], 'tunnel.log', local).pid; await saveState(host);
+    host.tunnel = launch(process.env.CLOUDFLARED_PATH || '/opt/homebrew/bin/cloudflared',
+      ['tunnel', '--no-autoupdate', '--protocol', 'http2', '--url', 'http://127.0.0.1:8796'], 'tunnel.log', local).pid; await saveState(host);
     for (let i = 0; i < 160; i++) {
       const log = await readFile(join(directory, 'tunnel.log'), 'utf8'), address = log.match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/)?.[0];
       if (address) { host.address = address; break; }
@@ -89,7 +92,8 @@ if (command === 'status') {
     }
     if (!host.address) throw new Error('Etäyhteyden osoitetta ei saatu.');
   }
-  if (process.platform === 'darwin') host.awake = launch('/usr/bin/caffeinate', ['-i', '-w', String(host.server)], 'awake.log', local).pid;
+  if (keepServer && await owned(previous.awake, 'awake')) host.awake = previous.awake;
+  else if (process.platform === 'darwin') host.awake = launch('/usr/bin/caffeinate', ['-i', '-w', String(host.server)], 'awake.log', local).pid;
   await saveState(host); await waitForStudio(host.address); await publishConnection(host);
   console.log(`Uusi Studio toimii omalla palvelimellaan: ${editor}`);
 } else throw new Error('Käytä start, restart, stop tai status.');

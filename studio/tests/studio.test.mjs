@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
 import WS from 'ws';
+import * as encoding from 'lib0/encoding';
 import { yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
 import { createStudioServer } from '../server.mjs';
 import { StudioStore, vector } from '../store.mjs';
@@ -23,6 +24,35 @@ function client(server, login, origin = `http://127.0.0.1:${server.port}`) {
   return { doc, provider, close: () => { provider.destroy(); doc.destroy(); } };
 }
 const plain = (doc, field) => (yXmlFragmentToProsemirrorJSON(doc.getXmlFragment(field)).content?.[0]?.content || []).map(node => node.text || '\n').join('');
+
+test('a connected editor cannot resurrect another disconnected editor as a duplicate avatar', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'althea-presence-'));
+  const server = await createStudioServer({ port: 0, development: true, secret, dataDir: directory });
+  const a = client(server, 'juho'), b = client(server, 'julia'), observer = client(server, 'juho');
+  t.after(async () => { a.close(); b.close(); observer.close(); await server.close(); await rm(directory, { recursive: true, force: true }); });
+  await waitFor(() => a.provider.synced && b.provider.synced && observer.provider.synced);
+  for (const peer of [a, b, observer]) peer.provider.awareness.setLocalStateField('user', { name: 'Fake' });
+  await waitFor(() => observer.provider.awareness.getStates().has(a.doc.clientID) && observer.provider.awareness.getStates().has(b.doc.clientID));
+  a.provider.disconnect();
+  await waitFor(() => !observer.provider.awareness.getStates().has(a.doc.clientID));
+
+  // A reconnecting browser can relay an old peer along with its own updated state.
+  const update = encoding.createEncoder(); encoding.writeVarUint(update, 2);
+  for (const [id, clock, state] of [
+    [a.doc.clientID, 100000, { user: { name: 'Fake ghost' } }],
+    [b.doc.clientID, b.provider.awareness.meta.get(b.doc.clientID).clock + 1,
+      { user: { name: 'Fake' }, activeField: 'kokemus-lyhyesti-h2-1' }]
+  ]) { encoding.writeVarUint(update, id); encoding.writeVarUint(update, clock); encoding.writeVarString(update, JSON.stringify(state)); }
+  const packet = encoding.createEncoder(); encoding.writeVarUint(packet, 1);
+  encoding.writeVarUint8Array(packet, encoding.toUint8Array(update)); b.provider.ws.send(encoding.toUint8Array(packet));
+  await waitFor(() => observer.provider.awareness.getStates().get(b.doc.clientID)?.activeField === 'kokemus-lyhyesti-h2-1');
+  assert.equal(observer.provider.awareness.getStates().has(a.doc.clientID), false);
+  assert.equal(observer.provider.awareness.getStates().get(b.doc.clientID).user.login, 'julia');
+  a.provider.connect();
+  a.provider.awareness.setLocalStateField('user', { name: 'Fake' });
+  await waitFor(() => observer.provider.awareness.getStates().has(a.doc.clientID));
+  assert.equal(observer.provider.awareness.getStates().get(a.doc.clientID).user.login, 'juho');
+});
 
 test('tokens reject tampering, expiry and users outside the allowlist', () => {
   const token = issueStudioToken({ login: 'juho' }, secret, 1000000);

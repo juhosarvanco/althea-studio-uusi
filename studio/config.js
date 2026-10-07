@@ -11,8 +11,8 @@ export function sitePath(path = '') {
 }
 
 let configuration;
-export async function studioConfiguration() {
-  if (!configuration) {
+export async function studioConfiguration({ refresh = false } = {}) {
+  if (!configuration || refresh) {
     const response = await fetch(sitePath('studio/config.json'), { cache: 'no-store' });
     if (!response.ok) throw new Error('Studion yhteysasetuksia ei voitu avata.');
     const data = await response.json();

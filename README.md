@@ -13,6 +13,12 @@ Avaa Studio ja valitse **Kirjaudu GitHubilla**. Studio näyttää GitHubin kerta
 vahvistuskoodin. Avaa GitHub painikkeesta, syötä koodi ja hyväksy kirjautuminen.
 Studio yhdistyy automaattisesti. Sallittuja tunnuksia ovat `juhosarvanco` ja `juliagrahn`.
 GitHub-kirjautuminen pyytää vain käyttäjän tunnistamista, ei oikeuksia repositorioihin.
+Kirjautuminen muistetaan samassa selaimessa 30 päivää, myös välilehden sulkemisen ja
+palvelimen uudelleenkäynnistyksen jälkeen. Selainhistorian yhteydessä poistettavat
+sivustotiedot, yksityinen selaus tai GitHub-oikeuden peruuttaminen voivat vaatia uuden
+kirjautumisen. **Kirjaudu ulos** päättää kirjautumisen kyseisessä selaimessa.
+Osallistujarivillä näkyy yksi ympyrä käyttäjää kohti. Ympyrän lisätiedot kertovat,
+jos sama käyttäjä on avannut useita välilehtiä.
 
 Klikkaa otsikkoa tai tekstikappaletta ja kirjoita. Muutokset välittyvät heti toiselle.
 **Tallennettu yhteiseen versioon** kertoo, että palvelin on tallentanut muutokset.
@@ -30,7 +36,8 @@ Kirjoittaminen ei vielä muuta julkista sivua.
 
 Jos yhteys katkeaa, odota yhteyden palautumista ja tallennusilmoitusta ennen sivun sulkemista.
 Palvelimelle jo tallennetut muutokset säilyvät myös tietokoneen sammuttamisen jälkeen.
-Kirjautuminen voi vaatia uuden GitHub-hyväksynnän palvelimen käynnistyessä uudelleen.
+Yhteyskatko ei poista muistettua kirjautumista. Studio yrittää yhteyttä uudelleen ja
+hakee päivitetyn yhteysosoitteen automaattisesti.
 
 Tekoälylle voi pyytää: **Lue ja toteuta uuden Studion avoimet muokkauskommentit**.
 Sivun WebMCP-toiminnot antavat yhteiset tekstit ja kommentit kirjautuneessa Studiossa.
@@ -45,6 +52,9 @@ HTTPS-yhteyden välittää erillinen Cloudflare-tunneli.
 Uuden Studion työversio, kommentit, kuvat ja historia ovat tämän projektin
 `.studio-live/data/`-kansiossa. Niitä ei viedä julkiseen repoon.
 GitHubissa on julkaistu sisältö ja editorin lähdekoodi.
+Kirjautumisten yksityinen tallennus on saman kansion `github-sessions.enc`-tiedostossa.
+Se salataan Studion omalla allekirjoitusavaimella; GitHubin käyttöoikeustunnuksia ei
+tallenneta selaimeen, julkiseen repoon tai sivun sisältövienteihin.
 
 Mac ja internetyhteys tarvitaan yhteismuokkaukseen. Näyttö saa sammua.
 Julkinen GitHub Pages -sivu toimii myös Macin ollessa pois päältä.
@@ -63,6 +73,7 @@ Käynnistys päivittää uuden repon `STUDIO_SERVER_URL`-asetuksen ja julkaisee 
 Se tarkistaa myös, vastaako etäyhteys oikeasti. Koneen sammuttamisen tai lepotilan jälkeen
 vanhentunut yhteys uudistetaan automaattisesti käynnistyksen yhteydessä. GitHub Pagesin
 päivitys voi kestää muutaman minuutin; päivitä sen jälkeen selaimen Studio-sivu.
+Pelkkä katkenneen etäyhteyden korjaus säilyttää toimivan tallennuspalvelimen käynnissä.
 Vanhan Studion palvelimeen tai Netlify-asetuksiin ei kosketa.
 
 ```sh

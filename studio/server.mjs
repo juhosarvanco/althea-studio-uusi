@@ -32,7 +32,8 @@ export async function createStudioServer(options = {}) {
   const store = new StudioStore(options.dataDir || process.env.STUDIO_DATA_DIR || join(root, '.studio-data'),
     manifest, await readFile(join(root, 'site/studio/template.html'), 'utf8'));
   const media = new MediaLibrary(store.directory, join(root, 'site'), store.template);
-  const login = options.login || new GithubLogin({ clientId: process.env.GITHUB_CLIENT_ID || '', allowed });
+  const login = options.login || new GithubLogin({ clientId: process.env.GITHUB_CLIENT_ID || '', allowed,
+    ...(!development ? { directory: store.directory, secret } : {}) });
   const publisher = options.publisher || new GithubPublisher({ store, media, site: join(root, 'site') });
   const online = new awareness.Awareness(store.doc); online.setLocalState(null);
   const connections = new Map();
@@ -78,11 +79,22 @@ export async function createStudioServer(options = {}) {
       if (!development && req.method === 'POST' && url.pathname === '/api/login-poll') {
         if (!acceptedOrigins.has(req.headers.origin)) return response(req, res, 403, { error: 'Origin not allowed' });
         const body = await readBody(req), result = await login.poll(body.id);
-        return response(req, res, 200, result.pending ? result : { user: { login: result.user.login, name: result.user.name }, token: issueStudioToken(result.user, secret) });
+        return response(req, res, 200, result.pending ? result : { user: { login: result.user.login, name: result.user.name },
+          token: issueStudioToken(result.user, secret), remember: result.remember });
       }
       if (!development && req.method === 'GET' && url.pathname === '/api/studio-session') {
-        const user = await login.refresh(authenticate(req));
+        const credential = (req.headers.authorization || '').replace(/^Bearer /, '');
+        const user = credential.startsWith('althea-remember.')
+          ? await login.resume(credential.slice('althea-remember.'.length)) : await login.refresh(authenticate(req));
         return response(req, res, 200, { user: { login: user.login, name: user.name }, token: issueStudioToken(user, secret) });
+      }
+      if (!development && req.method === 'POST' && url.pathname === '/api/logout') {
+        if (!acceptedOrigins.has(req.headers.origin)) return response(req, res, 403, { error: 'Origin not allowed' });
+        const credential = (req.headers.authorization || '').replace(/^Bearer /, '');
+        if (!credential.startsWith('althea-remember.')) return response(req, res, 401, { error: 'Kirjaudu uudelleen.' });
+        const user = login.logout(credential.slice('althea-remember.'.length));
+        for (const socket of connections.keys()) if (socket.studioUser?.sid === user.sid) socket.close(4001, 'Signed out');
+        return response(req, res, 200, { ok: true });
       }
       if (url.pathname === '/api/studio-session' && development) {
         // Never accessible via a tunnel, even when the process is bound to loopback.
@@ -185,6 +197,9 @@ export async function createStudioServer(options = {}) {
   });
   sockets.on('connection', (socket, user) => {
     const ids = new Set(); connections.set(socket, ids);
+    socket.studioUser = user; socket.alive = true;
+    socket.on('pong', () => socket.alive = true);
+    let ownAwarenessId = null;
     const expire = setTimeout(() => socket.close(4001, 'Session expired'), Math.max(0, user.exp * 1000 - Date.now()));
     socket.on('close', () => { clearTimeout(expire); connections.delete(socket); layoutSubscribers.delete(socket); mediaSubscribers.delete(socket); awareness.removeAwarenessStates(online, [...ids], socket); });
     socket.on('error', () => socket.close());
@@ -205,11 +220,13 @@ export async function createStudioServer(options = {}) {
           for (let i = 0; i < count; i++) {
             const id = decoding.readVarUint(incoming), clock = decoding.readVarUint(incoming);
             let state = JSON.parse(decoding.readVarString(incoming));
-            // y-websocket relays known remote presence on reconnect. Its owner
-            // remains authoritative; a relay cannot rename or remove that user.
+            // Each connection owns only its first local cursor. y-websocket also
+            // relays remote state; never adopt old/disconnected peers as ghosts.
             if ([...connections].some(([other, otherIds]) => other !== socket && otherIds.has(id))) continue;
+            if (ownAwarenessId === null && state) ownAwarenessId = id;
+            if (id !== ownAwarenessId) continue;
             if (state) {
-              state = { user: { name: user.name, color: user.sub.includes('julia') ? '#a35d6a' : '#48645a' },
+              state = { user: { login: user.sub, name: user.name, color: user.sub.includes('julia') ? '#a35d6a' : '#48645a' },
                 activeField: typeof state.activeField === 'string' ? state.activeField.slice(0, 100) : null,
                 cursor: state.cursor || null };
               ids.add(id);
@@ -231,11 +248,17 @@ export async function createStudioServer(options = {}) {
     socket.send(packet(1, awareness.encodeAwarenessUpdate(online, [...online.getStates().keys()])));
   });
   const timer = setInterval(() => { if (connections.size) store.checkpoint('Automaattinen versio', 'Althea'); }, 15 * 60 * 1000); timer.unref();
+  const heartbeat = setInterval(() => {
+    for (const socket of connections.keys()) {
+      if (!socket.alive) { socket.terminate(); continue; }
+      socket.alive = false; socket.ping();
+    }
+  }, 30000); heartbeat.unref();
   await new Promise((resolve, reject) => { http.once('error', reject); http.listen(options.port ?? Number(process.env.STUDIO_PORT || 8796), host, resolve); });
   const port = http.address().port;
   if (development) { acceptedOrigins.add(`http://127.0.0.1:${port}`); acceptedOrigins.add(`http://localhost:${port}`); }
   return { http, store, media, port, secret, close: async () => {
-    clearInterval(timer); for (const socket of connections.keys()) socket.terminate();
+    clearInterval(timer); clearInterval(heartbeat); for (const socket of connections.keys()) socket.terminate();
     await new Promise(resolve => sockets.close(resolve)); await new Promise(resolve => http.close(resolve)); online.destroy(); store.close();
   } };
 }

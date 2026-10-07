@@ -11,6 +11,8 @@ import { reconcileLayout, startPageBehavior } from './live-layout.js';
 import { createAnnotationPicker, anchorFor, anchorElement, elementLabel, textRange } from './annotations.js';
 import { createMediaMode } from './media-client.js';
 import { studioConfiguration, connectionMessage } from './config.js';
+import { sessionCache, needsLogin } from './session-cache.mjs';
+import { participants } from './presence.mjs';
 
 const $ = selector => document.querySelector(selector);
 const doc = new Y.Doc();
@@ -19,6 +21,8 @@ let session, provider, activeField = null, editing = true, connected = false, pe
 let historyRequest = 0, historyField = null, historyTimer, archiveTimer;
 let layout = null, pendingLayout = null, layoutRequest = 0, composing = false, refreshingLayout = false;
 let annotating = false, showResolvedComments = false, commentDraft = '', selectedCommentKey = '';
+const credentials = sessionCache(localStorage, sessionStorage);
+let sessionRequest, recoveryTimer, starting, awaitingLogin = false, loginActive = false;
 const mediaMode = createMediaMode({ api, getSession: () => session, getHeading: id => editors.get(id)?.getText(),
   container: document.querySelector('#studio-panel-content'), toast: message => toast(message), isConnected: () => connected,
   onApplied: () => refreshLayout(), confirmAction: confirmation });
@@ -122,16 +126,17 @@ function renderPeople() {
   const people = $('#studio-people'); people.replaceChildren();
   document.querySelectorAll('.studio-remote').forEach(el => el.classList.remove('studio-remote'));
   const states = [...provider.awareness.getStates()];
-  for (const [id, state] of states) {
-    if (!state.user) continue;
+  for (const state of participants(states, doc.clientID)) {
     const button = document.createElement('button'); button.className = 'studio-person'; button.type = 'button';
     button.style.setProperty('--person-color', state.user.color); button.textContent = state.user.name.slice(0, 1);
-    button.title = `${state.user.name}${id === doc.clientID ? ' · sinä' : ''}`;
+    button.title = `${state.user.name}${state.own ? ' · sinä' : ''}${state.clients.length > 1 ? ` · ${state.clients.length} välilehteä` : ''}`;
     button.setAttribute('aria-label', `Näytä ${state.user.name}n muokkaama kohta`);
     button.onclick = () => { const el = document.querySelector(`[data-studio-field="${CSS.escape(state.activeField || '')}"]`); el?.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
     people.append(button);
-    if (id !== doc.clientID && state.activeField) { const el = document.querySelector(`[data-studio-field="${CSS.escape(state.activeField)}"]`);
-      el?.classList.add('studio-remote'); el?.style.setProperty('--remote-color', state.user.color); }
+  }
+  for (const [id, state] of states) if (id !== doc.clientID && state.user && state.activeField) {
+    const el = document.querySelector(`[data-studio-field="${CSS.escape(state.activeField)}"]`);
+    el?.classList.add('studio-remote'); el?.style.setProperty('--remote-color', state.user.color);
   }
 }
 function showPanel(type) {
@@ -367,21 +372,58 @@ function registerTools() {
   tool('althea_read_comments', 'Lue yhteiset alue- ja tekstikommentit sekä niiden pysyvät kohdetunnisteet. Ei muuta sisältöä.', {}, [],
     () => [...comments].map(([id, comment]) => ({ id, ...comment, targetLabel: anchorLabel(commentAnchor(comment)) })), true, true);
 }
-async function getSession() {
+async function loadSession(refreshConfiguration) {
   const local = ['localhost', '127.0.0.1'].includes(location.hostname);
   const requested = new URL(location.href).searchParams.get('name') === 'julia' ? 'julia' : 'juho';
-  const configuration = await studioConfiguration();
-  const token = session?.token || sessionStorage.getItem('althea-studio-uusi-session');
+  const configuration = await studioConfiguration({ refresh: refreshConfiguration });
+  const token = credentials.credential(session);
   const response = await fetch(`${configuration.server}/api/studio-session${local ? `?name=${requested}` : ''}`, {
     cache: 'no-store', headers: token ? { authorization: `Bearer ${token}` } : {}, signal: AbortSignal.timeout(15000) });
-  const result = await response.json(); if (!response.ok) { const error = new Error(result.error || result.message || 'Kirjautuminen epäonnistui.'); error.status = response.status; throw error; }
-  sessionStorage.setItem('althea-studio-uusi-session', result.token);
+  let result;
+  try { result = await response.json(); } catch { throw new TypeError('Tallennuspalvelimen yhteys ei vastaa.'); }
+  if (!response.ok) { const error = new Error(result.error || result.message || 'Kirjautuminen epäonnistui.'); error.status = response.status; throw error; }
+  credentials.save(result);
   return { ...result, server: configuration.server };
+}
+async function getSession(refreshConfiguration = false) {
+  if (!sessionRequest) sessionRequest = loadSession(refreshConfiguration).finally(() => sessionRequest = null);
+  return sessionRequest;
+}
+function recoverSession() {
+  clearTimeout(recoveryTimer);
+  if (!awaitingLogin) recoveryTimer = setTimeout(() => {
+    if (loginActive) { recoverSession(); return; }
+    if (provider) renewSession(); else start();
+  }, 10000);
+}
+function sessionFailure(error) {
+  if (needsLogin(error)) {
+    awaitingLogin = true; clearTimeout(recoveryTimer); credentials.clear();
+    provider?.disconnect(); connected = false; status();
+  } else recoverSession();
+  if (needsLogin(error) || !mounted) {
+    $('#studio-gate-message').textContent = needsLogin(error)
+      ? 'Kirjaudu omalla GitHub-tunnuksellasi. Muutokset tallentuvat tähän erilliseen Studioon.' : connectionMessage(error);
+    $('#studio-login').hidden = false;
+    if (!$('#studio-gate').open) $('#studio-gate').showModal();
+  } else toast('Yhteys odottaa. Kirjautuminen säilyy ja yhteyttä yritetään uudelleen.');
+}
+function connectSession() {
+  const address = session.server.replace(/^http/, 'ws') + '/sync';
+  if (provider.serverUrl !== address) { provider.disconnect(); provider.serverUrl = address; }
+  provider.awareness.setLocalStateField('user', { login: session.user.login, name: session.user.name,
+    color: session.user.login.includes('julia') ? '#a35d6a' : '#48645a' });
+  provider.connect(); clearTimeout(recoveryTimer);
+}
+async function renewSession() {
+  if (awaitingLogin || loginActive) return;
+  try { session = await getSession(!connected); awaitingLogin = false; connectSession(); }
+  catch (error) { sessionFailure(error); }
 }
 let loginSequence = 0;
 $('#studio-login').onclick = async () => {
   const sequence = ++loginSequence, button = $('#studio-login');
-  button.disabled = true;
+  button.disabled = true; loginActive = true;
   try {
     const configuration = await studioConfiguration();
     const request = async (path, body) => {
@@ -403,20 +445,20 @@ $('#studio-login').onclick = async () => {
       const result = await request('/api/login-poll', { id: attempt.id });
       if (result.pending) { interval = result.interval; continue; }
       session = { ...result, server: configuration.server };
-      sessionStorage.setItem('althea-studio-uusi-session', result.token);
+      credentials.save(result); awaitingLogin = false;
       $('#studio-login-step').hidden = true;
       await start(); return;
     }
     if (sequence === loginSequence) throw new Error('Kirjautumispyyntö vanheni. Aloita uudelleen.');
   } catch (error) { $('#studio-gate-message').textContent = connectionMessage(error); }
-  finally { button.disabled = false; button.textContent = 'Kirjaudu GitHubilla'; }
+  finally { loginActive = false; button.disabled = false; button.textContent = 'Kirjaudu GitHubilla'; }
 };
 $('#studio-login-cancel').onclick = () => { loginSequence++; $('#studio-login-step').hidden = true; $('#studio-login').disabled = false; $('#studio-login').textContent = 'Kirjaudu GitHubilla'; $('#studio-gate-message').textContent = 'Kirjaudu omalla GitHub-tunnuksellasi. Muutokset tallentuvat tähän erilliseen Studioon.'; };
-async function start() {
+async function initialize() {
   try {
-    session = await getSession();
+    session = await getSession(true); awaitingLogin = false;
     $('#studio-gate').close();
-    if (provider) { provider.connect(); return; }
+    if (provider) { connectSession(); await refreshLayout(); await mediaMode.refresh(); return; }
     const Socket = class extends WebSocket { constructor(url) { super(url, [`althea-auth.${session.token}`]); } };
     provider = new WebsocketProvider(session.server.replace(/^http/, 'ws') + '/sync', 'althea-uusi', doc,
       { WebSocketPolyfill: Socket, disableBc: true });
@@ -427,30 +469,47 @@ async function start() {
       connected = event.status === 'connected';
       if (connected) { for (const type of [5, 6]) { const request = encoding.createEncoder(); encoding.writeVarUint(request, type); provider.ws.send(encoding.toUint8Array(request)); } mediaMode.refresh().catch(error => toast(error.message)); }
       status();
+      if (!connected) recoverSession();
     });
     provider.on('sync', synced => { if (synced) { applyPendingLayout(); status(); } });
-    provider.awareness.setLocalStateField('user', { name: session.user.name, color: session.user.login.includes('julia') ? '#a35d6a' : '#48645a' });
+    connectSession();
     provider.awareness.on('change', renderPeople);
     doc.on('update', () => {
       applyPendingLayout(); status(); picker.refresh();
       if (panel === 'archive') { clearTimeout(archiveTimer); archiveTimer = setTimeout(renderArchive, 150); }
     });
-    await refreshLayout();
-    await mediaMode.refresh();
     setInterval(() => {
       if (connected && !refreshingLayout && layout?.layoutHash !== doc.getMap('meta').get('layoutHash')) refreshLayout();
       applyPendingLayout();
     }, 1500);
     if (session.development) { $('.studio-bar').classList.add('studio-local'); $('.studio-brand span').textContent = `${session.user.name} · paikallinen kokeilu`;
       $('#studio-publish').textContent = 'Lataa sivu'; }
-    setInterval(async () => { try { session = await getSession(); } catch { connected = false; provider.disconnect(); status(); $('#studio-gate-message').textContent = 'Kirjautuminen vanheni. Työversio säilyy palvelimella.'; $('#studio-gate').showModal(); } }, 10 * 60 * 1000);
+    setInterval(renewSession, 5 * 60 * 1000);
+    await refreshLayout();
+    await mediaMode.refresh();
   } catch (error) {
-    $('#studio-gate-message').textContent = error.status === 401 ? 'Kirjaudu omalla GitHub-tunnuksellasi. Muutokset tallentuvat tähän erilliseen Studioon.' : connectionMessage(error);
-    $('#studio-login').hidden = false;
-    if (!$('#studio-gate').open) $('#studio-gate').showModal();
-    $('#studio-status').textContent = 'Yhteiseditori odottaa kirjautumista';
+    sessionFailure(error);
   }
 }
+async function start() {
+  if (!starting) starting = initialize().finally(() => starting = null);
+  return starting;
+}
+$('#studio-logout').onclick = async () => {
+  if (mounted && (!durable() || commentDraft.trim())) return toast('Odota tekstien tallennusta ja tallenna keskeneräinen kommentti ennen uloskirjautumista.');
+  try {
+    if (!session?.development) {
+      const response = await fetch(session.server + '/api/logout', { method: 'POST',
+        headers: { authorization: `Bearer ${credentials.credential(session)}` }, signal: AbortSignal.timeout(15000) });
+      if (!response.ok && response.status !== 401) throw new Error('Uloskirjautuminen ei onnistunut. Yritä uudelleen.');
+    }
+    awaitingLogin = true; clearTimeout(recoveryTimer); loginSequence++;
+    provider?.awareness.setLocalState(null); provider?.disconnect(); connected = false;
+    credentials.clear(); session = null; renderPeople(); status();
+    $('#studio-gate-message').textContent = 'Olet kirjautunut ulos. Tallennettu työversio säilyy.';
+    $('#studio-login').hidden = false; if (!$('#studio-gate').open) $('#studio-gate').showModal();
+  } catch (error) { toast(connectionMessage(error)); }
+};
 function setAnnotationMode(value) {
   if (composing) { toast('Viimeistele keskeneräinen kirjoitus ennen kommentointitilaa.'); return; }
   if (value) mediaMode.setEnabled(false);
