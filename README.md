@@ -68,13 +68,27 @@ npm run studio:start
 npm run studio:status
 ```
 
-Palvelimen voi käynnistää myös tämän kansion `Käynnistä uusi Studio.command`-tiedostosta.
+Kaksoisnapsauta tämän kansion **Käynnistä uusi Studio.command** -tiedostoa tai Macin
+työpöydän **Käynnistä Althea Studio uudelleen.command** -pikakuvaketta.
+Se käynnistää palvelimen myös silloin, kun se on sammunut, ja korjaa tarvittaessa etäyhteyden.
+Odota ilmoitusta **VALMIS – Studio on käytettävissä**, ja päivitä selaimen Studio-sivu.
+Voit sulkea käynnistysikkunan; palvelin jää käyntiin. Tallennetut tekstit, kommentit
+ja kirjautumiset säilyvät. Jos Studio on jo käytössä, viimeistele kirjoittaminen ja
+odota tallennusilmoitusta ennen uudelleenkäynnistystä. Samanaikaiset kaksoisnapsautukset
+eivät käynnistä useita kilpailevia palvelimia.
+
 Käynnistys päivittää uuden repon `STUDIO_SERVER_URL`-asetuksen ja julkaisee uuden yhteysosoitteen.
 Se tarkistaa myös, vastaako etäyhteys oikeasti. Koneen sammuttamisen tai lepotilan jälkeen
 vanhentunut yhteys uudistetaan automaattisesti käynnistyksen yhteydessä. GitHub Pagesin
 päivitys voi kestää muutaman minuutin; päivitä sen jälkeen selaimen Studio-sivu.
 Pelkkä katkenneen etäyhteyden korjaus säilyttää toimivan tallennuspalvelimen käynnissä.
 Vanhan Studion palvelimeen tai Netlify-asetuksiin ei kosketa.
+
+Käynnistyspainikkeen edellytykset voi tarkistaa muuttamatta käynnissä olevaa palvelinta:
+
+```sh
+./"Käynnistä uusi Studio.command" --check
+```
 
 ```sh
 node tools/studio-host.mjs restart  # koodipäivitys, sama etäyhteys
