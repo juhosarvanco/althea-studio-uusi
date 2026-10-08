@@ -3,6 +3,9 @@ import { relativePositionToAbsolutePosition, ySyncPluginKey } from '@tiptap/y-ti
 import { relativeCommentPosition } from './comment-ranges.mjs';
 
 const selectable = '[data-studio-field], [data-studio-node]';
+// Keep browsing gallery images while commenting. Alt-click can still select
+// the navigation button itself as an annotation target.
+const galleryNavigation = event => !event.altKey && event.target.closest('[data-gallery-step]');
 const names = { header: 'Valikko', main: 'Koko sivu', footer: 'Alatunniste', section: 'Osio', article: 'Alue',
   div: 'Ryhmä', figure: 'Kuva-alue', img: 'Kuva', a: 'Linkki / painike', button: 'Painike',
   nav: 'Navigaatio', details: 'Avautuva alue', summary: 'Avautuvan alueen otsikko', form: 'Lomake',
@@ -106,15 +109,16 @@ export function createAnnotationPicker({ editors, onPick, onCancel, getComments,
   }
   document.addEventListener('pointermove', event => {
     if (!enabled) return;
-    const next = event.target.closest('[data-studio-chrome]') ? null : event.target.closest(selectable);
+    const next = event.target.closest('[data-studio-chrome]') || galleryNavigation(event) ? null : event.target.closest(selectable);
     if (next !== hover) { hover = next; refresh(); }
   });
   document.addEventListener('pointerdown', event => {
-    if (!enabled || event.target.closest('[data-studio-chrome]')) return;
+    if (!enabled || event.target.closest('[data-studio-chrome]') || galleryNavigation(event)) return;
     if (event.target.closest('a,button,input,select,summary,textarea') && !event.target.closest('[data-studio-field]')) event.preventDefault();
   }, true);
   document.addEventListener('click', event => {
     if (!enabled || event.target.closest('[data-studio-chrome]')) return;
+    if (galleryNavigation(event)) { refresh(); return; }
     event.preventDefault(); event.stopImmediatePropagation();
     const anchor = textAnchor(editors), el = event.target.closest(selectable), selection = window.getSelection();
     if (anchor) choose(anchor);
@@ -128,6 +132,7 @@ export function createAnnotationPicker({ editors, onPick, onCancel, getComments,
     if (!enabled) return;
     if (event.key === 'Escape' && !document.querySelector('dialog[open]')) { event.preventDefault(); onCancel(); return; }
     if (event.target.closest('[data-studio-chrome]')) return;
+    if (galleryNavigation(event)) { refresh(); return; }
     if (['Enter', ' '].includes(event.key) && event.target.closest('a,button,summary,input,select')) {
       event.preventDefault(); event.stopImmediatePropagation();
       const el = event.target.closest(selectable); if (el) choose(anchorFor(el));

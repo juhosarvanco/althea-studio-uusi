@@ -2,7 +2,7 @@
 export function startGalleries() {
   const positions = new Map();
   const visibleCount = gallery => Math.max(1, Number.parseInt(getComputedStyle(gallery).getPropertyValue('--gallery-visible'), 10) || 1);
-  const render = (gallery, index = positions.get(gallery.id) || 0) => {
+  const render = (gallery, index = positions.get(gallery.id) || 0, preserveFocus = true) => {
     const slides = [...gallery.querySelectorAll('[data-gallery-slide]')];
     if (!slides.length) return;
     const count = visibleCount(gallery), pages = Math.ceil(slides.length / count);
@@ -10,7 +10,7 @@ export function startGalleries() {
     let current = (((page % pages) + pages) % pages) * count;
     // Keep a caption being edited visible when the viewport or layout changes.
     const focused = slides.findIndex(slide => slide.contains(document.activeElement));
-    if (focused >= 0 && (focused < current || focused >= current + count)) current = Math.floor(focused / count) * count;
+    if (preserveFocus && focused >= 0 && (focused < current || focused >= current + count)) current = Math.floor(focused / count) * count;
     positions.set(gallery.id, current);
     slides.forEach((slide, i) => { slide.hidden = i < current || i >= current + count; });
     const counter = gallery.querySelector('[data-gallery-counter]');
@@ -18,13 +18,16 @@ export function startGalleries() {
     if (counter) counter.textContent = `${count > 1 ? `${current + 1}–${last}` : current + 1} / ${slides.length}`;
     for (const button of gallery.querySelectorAll('[data-gallery-step]')) button.disabled = pages < 2;
   };
-  const step = (gallery, direction) => render(gallery, (positions.get(gallery.id) || 0) + direction * visibleCount(gallery));
+  // An explicit navigation request wins over the previously focused caption.
+  // Safari can leave the editor focused when a button is clicked.
+  const step = (gallery, direction) => render(gallery, (positions.get(gallery.id) || 0) + direction * visibleCount(gallery), false);
   document.addEventListener('click', event => {
     if (event.defaultPrevented) return;
     const button = event.target.closest('[data-gallery-step]');
     const gallery = button?.closest('[data-gallery]');
     if (!gallery) return;
     event.preventDefault();
+    button.focus({ preventScroll: true });
     step(gallery, Number(button.dataset.galleryStep));
   });
   document.addEventListener('keydown', event => {
