@@ -36,9 +36,10 @@ main{position:relative;isolation:isolate}.photo-backdrop{position:fixed;inset:va
 .accommodation-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:32px;margin-bottom:26px}
 .accommodation-heading .eyebrow{margin-bottom:10px}.accommodation-heading h3{font-size:30px}
 .accommodation-heading .small-copy{max-width:32ch;margin:0;color:var(--body)}
-.place-gallery{--gallery-visible:3;overflow:visible}
-.place-gallery-track{display:grid;grid-template-columns:repeat(var(--gallery-visible),minmax(0,1fr));gap:20px}
-.place-gallery [data-gallery-slide]{min-width:0;overflow:hidden;background:#fff;border:1px solid var(--line);border-radius:20px}
+.place-gallery{--gallery-visible:3;--gallery-gap:20px;overflow:visible}
+.place-gallery-track{display:grid;grid-auto-flow:column;grid-auto-columns:calc((100% - (var(--gallery-visible) - 1)*var(--gallery-gap))/var(--gallery-visible));gap:var(--gallery-gap);overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x mandatory;scrollbar-width:none}
+.place-gallery-track::-webkit-scrollbar{display:none}
+.place-gallery [data-gallery-slide]{scroll-snap-align:start;scroll-snap-stop:always;min-width:0;overflow:hidden;background:#fff;border:1px solid var(--line);border-radius:20px}
 .place-gallery-photo{aspect-ratio:3/2;background:var(--panel);overflow:hidden}
 .place-gallery-photo img{width:100%;height:100%;object-fit:contain}
 .place-gallery-caption{padding:18px 20px;min-height:76px;margin:0;font-size:16px;line-height:1.5;color:var(--ink)}
@@ -60,7 +61,7 @@ main{position:relative;isolation:isolate}.photo-backdrop{position:fixed;inset:va
 .travel-step-icon svg{width:24px;height:24px}
 .arrival-section .travel-steps h4{font-size:21px;margin-bottom:14px}
 .arrival-section .travel-steps p{font-size:15px;line-height:1.7}
-@media(max-width:850px){.accommodation-heading{align-items:flex-start;gap:22px}.accommodation-heading h3{font-size:27px}.place-gallery-track{gap:14px}.place-gallery-caption{padding:15px;font-size:15px}.arrival-header{align-items:flex-start;flex-direction:column;gap:18px}.arrival-section{padding:28px}.arrival-section .travel-steps{grid-template-columns:1fr}.arrival-section .travel-steps li{padding:24px}.travel-step-top{margin-bottom:14px}}
+@media(max-width:850px){.accommodation-heading{align-items:flex-start;gap:22px}.accommodation-heading h3{font-size:27px}.place-gallery{--gallery-gap:14px}.place-gallery-caption{padding:15px;font-size:15px}.arrival-header{align-items:flex-start;flex-direction:column;gap:18px}.arrival-section{padding:28px}.arrival-section .travel-steps{grid-template-columns:1fr}.arrival-section .travel-steps li{padding:24px}.travel-step-top{margin-bottom:14px}}
 @media(max-width:700px){.place-gallery{--gallery-visible:1}.accommodation-heading{flex-direction:column;gap:12px}.accommodation-heading .small-copy{max-width:none}.place-gallery-caption{padding:18px 20px;min-height:0;font-size:16px}.place-gallery-controls{margin-top:16px}.accommodation-section{margin-top:34px;padding-top:30px}.arrival-section{margin-top:34px;padding:22px;border-radius:22px}.arrival-heading h3{font-size:28px}.arrival-route{font-size:13px;padding:9px 13px}.arrival-section .travel-steps{margin-top:22px;gap:14px}.arrival-section .travel-steps li{padding:22px}.arrival-section .travel-steps h4{font-size:22px}}
 </style>
 </head><body>
@@ -124,22 +125,22 @@ main{position:relative;isolation:isolate}.photo-backdrop{position:fixed;inset:va
     </div><div data-studio-node="node-paikka-gallery-slide-03" data-gallery-slide="" role="group" aria-roledescription="dia" aria-label="3 / 9">
      <div data-studio-node="node-paikka-gallery-photo-03" class="place-gallery-photo"><img data-studio-node="node-paikka-gallery-image-03" src="assets/img/studio-52ae801b8ed62d731cbd2ed706962f41ed29ac58ecd1e0464fdad7601feac6a8.webp" alt="Mökin pieni keittiö, keittotaso ja vedenkeitin" width="720" height="480" loading="lazy" decoding="async"></div>
      <p class="place-gallery-caption" data-gallery-caption="" data-studio-field="paikka-gallery-caption-03">Mökin keittiö</p>
-    </div><div data-studio-node="node-paikka-gallery-slide-04" data-gallery-slide="" role="group" aria-roledescription="dia" aria-label="4 / 9" hidden>
+    </div><div data-studio-node="node-paikka-gallery-slide-04" data-gallery-slide="" role="group" aria-roledescription="dia" aria-label="4 / 9">
      <div data-studio-node="node-paikka-gallery-photo-04" class="place-gallery-photo"><img data-studio-node="node-paikka-gallery-image-04" src="assets/img/studio-20581d590f22dcd6b415a5dbd604339ccec475d965c562742ec3da2bd38ca336.webp" alt="Kaarikattoinen mökki, vaaleat nojatuolit, keittiö ja sänky makuualkovissa" width="1400" height="934" loading="lazy" decoding="async"></div>
      <p class="place-gallery-caption" data-gallery-caption="" data-studio-field="paikka-gallery-caption-04">Oleskelutila ja makuualkovi</p>
-    </div><div data-studio-node="node-paikka-gallery-slide-05" data-gallery-slide="" role="group" aria-roledescription="dia" aria-label="5 / 9" hidden>
+    </div><div data-studio-node="node-paikka-gallery-slide-05" data-gallery-slide="" role="group" aria-roledescription="dia" aria-label="5 / 9">
      <div data-studio-node="node-paikka-gallery-photo-05" class="place-gallery-photo"><img data-studio-node="node-paikka-gallery-image-05" src="assets/img/studio-fb28794f228858a2aade4ad3c05c65588d14c363231dcea1bea83e010c0682c1.webp" alt="Puuverhoiltu mökki, ruskeat nahkanojatuolit ja näkymä puutarhaan" width="1400" height="934" loading="lazy" decoding="async"></div>
      <p class="place-gallery-caption" data-gallery-caption="" data-studio-field="paikka-gallery-caption-05">Lämminhenkinen oleskelutila</p>
-    </div><div data-studio-node="node-paikka-gallery-slide-06" data-gallery-slide="" role="group" aria-roledescription="dia" aria-label="6 / 9" hidden>
+    </div><div data-studio-node="node-paikka-gallery-slide-06" data-gallery-slide="" role="group" aria-roledescription="dia" aria-label="6 / 9">
      <div data-studio-node="node-paikka-gallery-photo-06" class="place-gallery-photo"><img data-studio-node="node-paikka-gallery-image-06" src="assets/img/studio-c280993904bcbb2df2dc92f6bfba91e42fa8eadb013b77404da6bb84d745f9d4.webp" alt="Mökin sänky, ruskeat nahkanojatuolit ja sininen pöytävalaisin" width="1400" height="934" loading="lazy" decoding="async"></div>
      <p class="place-gallery-caption" data-gallery-caption="" data-studio-field="paikka-gallery-caption-06">Mökin makuualkovi</p>
-    </div><div data-studio-node="node-paikka-gallery-slide-07" data-gallery-slide="" role="group" aria-roledescription="dia" aria-label="7 / 9" hidden>
+    </div><div data-studio-node="node-paikka-gallery-slide-07" data-gallery-slide="" role="group" aria-roledescription="dia" aria-label="7 / 9">
      <div data-studio-node="node-paikka-gallery-photo-07" class="place-gallery-photo"><img data-studio-node="node-paikka-gallery-image-07" src="assets/img/studio-76e49bb3322ab6d1004557f2fde2a2b2f20c7765c38785a5be13bbf4ad9e8ed6.webp" alt="Puinen mökki, avokeittiö, ruokailutila ja kuvioitu sohvan peite" width="1400" height="934" loading="lazy" decoding="async"></div>
      <p class="place-gallery-caption" data-gallery-caption="" data-studio-field="paikka-gallery-caption-07">Oleskelutila ja keittiö</p>
-    </div><div data-studio-node="node-paikka-gallery-slide-08" data-gallery-slide="" role="group" aria-roledescription="dia" aria-label="8 / 9" hidden>
+    </div><div data-studio-node="node-paikka-gallery-slide-08" data-gallery-slide="" role="group" aria-roledescription="dia" aria-label="8 / 9">
      <div data-studio-node="node-paikka-gallery-photo-08" class="place-gallery-photo"><img data-studio-node="node-paikka-gallery-image-08" src="assets/img/studio-a7d0453149e050eedb6e3742f825b6077ded056f44ce73bb051ee876790135b6.webp" alt="Mökin olohuone, sohva, sininen nojatuoli, puuhella ja suuret ikkunat puutarhaan" width="1400" height="934" loading="lazy" decoding="async"></div>
      <p class="place-gallery-caption" data-gallery-caption="" data-studio-field="paikka-gallery-caption-08">Olohuone puutarhan äärellä</p>
-    </div><div data-studio-node="node-paikka-gallery-slide-09" data-gallery-slide="" role="group" aria-roledescription="dia" aria-label="9 / 9" hidden>
+    </div><div data-studio-node="node-paikka-gallery-slide-09" data-gallery-slide="" role="group" aria-roledescription="dia" aria-label="9 / 9">
      <div data-studio-node="node-paikka-gallery-photo-09" class="place-gallery-photo"><img data-studio-node="node-paikka-gallery-image-09" src="assets/img/studio-66a725f5e8d315a593f0e0e2e3e14b7b5d64a9946ba63db0ed888b85e4939081.webp" alt="Puinen mökki, katettu terassi, sininen aurinkovarjo ja riippumatto" width="1400" height="934" loading="lazy" decoding="async"></div>
      <p class="place-gallery-caption" data-gallery-caption="" data-studio-field="paikka-gallery-caption-09">Terassi ja oma puutarha</p>
     </div></div>

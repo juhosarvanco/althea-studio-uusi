@@ -64,7 +64,8 @@ export function createAnnotationPicker({ editors, onPick, onCancel, getComments,
     Object.assign(node.style, { left: `${rect.left}px`, top: `${rect.top}px`, width: `${rect.width}px`, height: `${rect.height}px` });
   }
   function rectangle(anchor) {
-    const el = anchorElement(anchor); if (!el || el.closest('[data-studio-chrome]')) return null;
+    const el = anchorElement(anchor);
+    if (!el || el.closest('[data-studio-chrome], [data-gallery-slide][aria-hidden="true"]')) return null;
     if (anchor.kind === 'text') return textRange(anchor, editors)?.getBoundingClientRect() || el.getBoundingClientRect();
     return el.getBoundingClientRect();
   }
@@ -138,7 +139,7 @@ export function createAnnotationPicker({ editors, onPick, onCancel, getComments,
       const el = event.target.closest(selectable); if (el) choose(anchorFor(el));
     }
   }, true);
-  window.addEventListener('scroll', refresh, { passive: true }); window.addEventListener('resize', refresh);
+  window.addEventListener('scroll', refresh, { passive: true, capture: true }); window.addEventListener('resize', refresh);
   return { refresh, choose, levels, get selected() { return selected; },
     setEnabled(value) { enabled = value; hover = null; document.body.classList.toggle('studio-annotating', enabled); refresh(); },
     clear() { selected = null; hover = null; refresh(); } };

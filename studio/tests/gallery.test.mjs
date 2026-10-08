@@ -32,37 +32,45 @@ test('comment mode lets gallery controls navigate and still selects images and A
   assert.deepEqual(selected, { kind: 'element', nodeId: 'next' });
 });
 
-test('gallery arrows leave a focused caption, wrap, and survive a live layout replacement', t => {
+test('gallery moves one picture smoothly, stops at its ends, and preserves editing across resize and layout changes', t => {
   const { document, window } = parseHTML(`<html><body><figure id="gallery" data-gallery tabindex="0">
-    ${Array.from({ length: 9 }, (_, i) => `<div data-gallery-slide><div contenteditable="true">Caption ${i + 1}</div></div>`).join('')}
+    <div class="place-gallery-track">${Array.from({ length: 9 }, (_, i) => `<div data-gallery-slide><div contenteditable="true">Caption ${i + 1}</div></div>`).join('')}</div>
     <span data-gallery-counter></span>
     <button data-gallery-step="-1"><svg><path></path></svg></button>
     <button data-gallery-step="1"><svg><path></path></svg></button>
   </figure></body></html>`);
   const previous = { document: globalThis.document, window: globalThis.window, getComputedStyle: globalThis.getComputedStyle };
-  let count = 3, active;
+  let count = 3, active, reduced = false, lastScroll;
+  window.matchMedia = () => ({ matches: reduced });
+  const metrics = () => {
+    document.querySelectorAll('[data-gallery-slide]').forEach((slide, i) => Object.defineProperty(slide, 'offsetLeft', { value: i * 100 }));
+    document.querySelector('.place-gallery-track').scrollTo = options => lastScroll = options;
+  };
+  metrics();
   Object.defineProperty(document, 'activeElement', { get: () => active });
   Object.assign(globalThis, { document, window, getComputedStyle: () => ({ getPropertyValue: () => String(count) }) });
   t.after(() => Object.assign(globalThis, previous));
   const refresh = startGalleries();
-  const visible = () => [...document.querySelectorAll('[data-gallery-slide]')].filter(slide => !slide.hidden).map(slide => slide.textContent);
+  const visible = () => [...document.querySelectorAll('[data-gallery-slide]')].filter(slide => slide.getAttribute('aria-hidden') === 'false').map(slide => slide.textContent);
   const click = direction => {
     // Retain editor focus to reproduce browsers that do not focus clicked buttons.
     document.querySelector(`[data-gallery-step="${direction}"] path`).dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
   };
   active = document.querySelector('[contenteditable]');
   click(1);
-  assert.deepEqual(visible(), ['Caption 4', 'Caption 5', 'Caption 6']);
-  assert.equal(document.querySelector('[data-gallery-counter]').textContent, '4–6 / 9');
+  assert.deepEqual(visible(), ['Caption 2', 'Caption 3', 'Caption 4']);
+  assert.equal(document.querySelector('[data-gallery-counter]').textContent, '2–4 / 9');
+  assert.deepEqual(lastScroll, { left: 100, behavior: 'smooth' });
   active = null;
-  click(1); click(1);
-  assert.deepEqual(visible(), ['Caption 1', 'Caption 2', 'Caption 3']);
-  click(-1);
+  for (let i = 0; i < 10; i++) click(1);
   assert.deepEqual(visible(), ['Caption 7', 'Caption 8', 'Caption 9']);
+  assert.equal(document.querySelector('[data-gallery-step="1"]').disabled, true);
+  click(-1);
+  assert.deepEqual(visible(), ['Caption 6', 'Caption 7', 'Caption 8']);
 
   const old = document.querySelector('[data-gallery]');
-  old.replaceWith(old.cloneNode(true)); refresh(); click(-1);
-  assert.deepEqual(visible(), ['Caption 4', 'Caption 5', 'Caption 6']);
+  old.replaceWith(old.cloneNode(true)); metrics(); refresh(); click(-1);
+  assert.deepEqual(visible(), ['Caption 5', 'Caption 6', 'Caption 7']);
   active = document.querySelectorAll('[contenteditable]')[5]; count = 1; refresh();
   assert.deepEqual(visible(), ['Caption 6']);
   const arrow = new window.Event('keydown', { bubbles: true, cancelable: true });
@@ -70,4 +78,24 @@ test('gallery arrows leave a focused caption, wrap, and survive a live layout re
   assert.deepEqual(visible(), ['Caption 6'], 'cursor arrows must not change pictures while typing');
   click(1);
   assert.deepEqual(visible(), ['Caption 7']);
+  reduced = true; click(-1);
+  assert.deepEqual(lastScroll, { left: 500, behavior: 'instant' });
+  active = null;
+  for (let i = 0; i < 10; i++) click(-1);
+  assert.deepEqual(visible(), ['Caption 1']);
+  assert.equal(document.querySelector('[data-gallery-step="-1"]').disabled, true);
+
+  // Manual touch/scroll navigation updates the same counter and arrow state.
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const track = document.querySelector('.place-gallery-track');
+  track.scrollLeft = 300;
+  track.dispatchEvent(new window.Event('scroll'));
+  t.mock.timers.tick(161);
+  assert.deepEqual(visible(), ['Caption 4']);
+  click(1);
+  assert.deepEqual(visible(), ['Caption 5']);
+  track.dispatchEvent(new window.Event('scroll'));
+  click(1);
+  t.mock.timers.tick(161);
+  assert.deepEqual(visible(), ['Caption 6'], 'an old scroll callback must not reverse a new arrow click');
 });
