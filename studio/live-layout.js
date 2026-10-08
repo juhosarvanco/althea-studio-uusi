@@ -1,6 +1,7 @@
 // Reuse the actual editor elements rather than rendering saved text over them.
 // Their Yjs bindings, selections and undo managers survive a layout move.
 import { sitePath } from './config.js';
+import { startGalleries } from '../site/gallery.js';
 
 export function reconcileLayout(layout, editors, prepareImages = () => {}) {
   const incoming = new DOMParser().parseFromString(layout.html, 'text/html');
@@ -76,6 +77,7 @@ export function reconcileLayout(layout, editors, prepareImages = () => {}) {
 // Studio owns page interactions so they always query the current live layout.
 // The public page retains its original standalone background implementation.
 export function startPageBehavior() {
+  const refreshGalleries = startGalleries();
   let observer, frame, measured = false;
   const measure = (force = false) => {
     const backdrop = document.querySelector('.photo-backdrop');
@@ -105,6 +107,7 @@ export function startPageBehavior() {
   };
   const schedule = () => { cancelAnimationFrame(frame); frame = requestAnimationFrame(measure); };
   const refresh = () => {
+    refreshGalleries();
     observer?.disconnect(); observer = new ResizeObserver(schedule);
     const main = document.querySelector('main'); if (main) observer.observe(main);
     const header = document.querySelector('.site-header'); if (header) observer.observe(header);

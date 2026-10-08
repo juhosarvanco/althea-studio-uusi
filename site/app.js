@@ -1,4 +1,5 @@
 (() => {
+  import('./gallery.js').then(({ startGalleries }) => startGalleries());
   const $ = selector => document.querySelector(selector);
   // Each biography expands its own card, without stretching the adjacent card.
   for (const profiles of document.querySelectorAll('.profiles')) profiles.style.alignItems = 'start';

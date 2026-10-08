@@ -151,7 +151,8 @@ export function imageSlots(layout) {
   return [...document.querySelectorAll('main img[data-studio-node], header img[data-studio-node], footer img[data-studio-node]')].map(image => {
     const background = backgrounds.indexOf(image), section = background >= 0 ? background === 0
       ? document.querySelector('section.hero') : panels[background - 1] : image.closest('section');
-    const heading = (background < 0 && image.closest('article')?.querySelector('h2,h3,h4')) || section?.querySelector('h1,h2,h3');
+    const heading = image.closest('[data-gallery-slide]')?.querySelector('[data-gallery-caption]')
+      || (background < 0 && image.closest('article')?.querySelector('h2,h3,h4')) || section?.querySelector('h1,h2,h3');
     const state = imageState(image);
     return { id: image.getAttribute('data-studio-node'), kind: background >= 0 ? 'background' : 'image',
       label: background === 0 ? 'Yläosan taustakuva' : heading?.textContent?.trim().slice(0, 100) || section?.getAttribute('data-screen-label') || 'Sivun kuva',
