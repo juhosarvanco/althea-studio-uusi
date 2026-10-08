@@ -5,6 +5,11 @@ import { join, dirname } from 'node:path';
 import { prepareTemplate } from '../studio/template.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+// Bundle the shared gallery controls into the public page's deferred script.
+// A separate async import allowed the first arrow click to arrive too early.
+await build({ entryPoints: [join(root, 'tools/public-app.js')], bundle: true, format: 'iife',
+  outfile: join(root, 'site/app.js'), target: ['es2022'],
+  banner: { js: '// Generated from tools/public-app.js and site/gallery.js. Edit those sources and run npm run build.' } });
 const base = process.env.STUDIO_BASE_PATH || '/althea-studio-uusi/';
 if (!/^\/[a-zA-Z0-9_/-]*\/$/.test(base) && base !== '/') throw new Error('Invalid site base path');
 const { document, manifest, template } = prepareTemplate(await readFile(join(root, 'site/index.html'), 'utf8'));
