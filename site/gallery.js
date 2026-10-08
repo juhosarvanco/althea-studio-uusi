@@ -1,17 +1,24 @@
 // Delegated controls also work after Studio replaces the live page layout.
 export function startGalleries() {
   const positions = new Map();
+  const visibleCount = gallery => Math.max(1, Number.parseInt(getComputedStyle(gallery).getPropertyValue('--gallery-visible'), 10) || 1);
   const render = (gallery, index = positions.get(gallery.id) || 0) => {
     const slides = [...gallery.querySelectorAll('[data-gallery-slide]')];
     if (!slides.length) return;
-    const current = ((index % slides.length) + slides.length) % slides.length;
+    const count = visibleCount(gallery), pages = Math.ceil(slides.length / count);
+    const page = Math.floor(index / count);
+    let current = (((page % pages) + pages) % pages) * count;
+    // Keep a caption being edited visible when the viewport or layout changes.
+    const focused = slides.findIndex(slide => slide.contains(document.activeElement));
+    if (focused >= 0 && (focused < current || focused >= current + count)) current = Math.floor(focused / count) * count;
     positions.set(gallery.id, current);
-    slides.forEach((slide, i) => { slide.hidden = i !== current; });
+    slides.forEach((slide, i) => { slide.hidden = i < current || i >= current + count; });
     const counter = gallery.querySelector('[data-gallery-counter]');
-    if (counter) counter.textContent = `${current + 1} / ${slides.length}`;
-    for (const button of gallery.querySelectorAll('[data-gallery-step]')) button.disabled = slides.length < 2;
+    const last = Math.min(current + count, slides.length);
+    if (counter) counter.textContent = `${count > 1 ? `${current + 1}–${last}` : current + 1} / ${slides.length}`;
+    for (const button of gallery.querySelectorAll('[data-gallery-step]')) button.disabled = pages < 2;
   };
-  const step = (gallery, direction) => render(gallery, (positions.get(gallery.id) || 0) + direction);
+  const step = (gallery, direction) => render(gallery, (positions.get(gallery.id) || 0) + direction * visibleCount(gallery));
   document.addEventListener('click', event => {
     if (event.defaultPrevented) return;
     const button = event.target.closest('[data-gallery-step]');
@@ -29,6 +36,7 @@ export function startGalleries() {
     step(gallery, event.key === 'ArrowLeft' ? -1 : 1);
   });
   const refresh = () => document.querySelectorAll('[data-gallery]').forEach(gallery => render(gallery));
+  window.addEventListener('resize', refresh);
   refresh();
   return refresh;
 }
