@@ -1,5 +1,7 @@
 (() => {
   const $ = selector => document.querySelector(selector);
+  // Each biography expands its own card, without stretching the adjacent card.
+  for (const profiles of document.querySelectorAll('.profiles')) profiles.style.alignItems = 'start';
   const policy = $('#policy-dialog');
   for (const button of document.querySelectorAll('[data-policy]')) button.addEventListener('click', () => {
     const privacy = button.dataset.policy === 'privacy';

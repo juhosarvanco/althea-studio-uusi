@@ -1,6 +1,7 @@
 body { padding-top: 72px; }
 html { scroll-padding-top: 190px; }
 .site-header { top: 72px; }
+.profiles { align-items: start; }
 .studio-bar, #studio-sidebar, dialog[data-studio-chrome], #studio-toast { font: 14px/1.55 'Karla',system-ui,sans-serif; color: #0d1f29; }
 .studio-bar { position: fixed; inset: 0 0 auto; min-height: 72px; z-index: 1000; display: flex; gap: 20px; align-items: center; padding: 12px 24px; background: #e8eee9; border-bottom: 1px solid #c1cdc3; box-shadow: 0 3px 16px #0d1f2908; }
 .studio-brand { font: 17px Georgia,serif; letter-spacing: .15em; text-decoration: none; color: #0d1f29; white-space: nowrap; }
