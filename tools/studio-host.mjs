@@ -7,6 +7,7 @@ import { randomBytes } from 'node:crypto';
 import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { studioReachable, waitForStudio } from './studio-health.mjs';
+import { quickTunnelAddress, tunnelFailureMessage } from './studio-tunnel.mjs';
 const run = promisify(execFile);
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..'), directory = join(root, '.studio-live');
 const statePath = join(directory, 'host.json'), envPath = join(root, '.env.studio');
@@ -86,9 +87,11 @@ if (command === 'status') {
     host.tunnel = launch(process.env.CLOUDFLARED_PATH || '/opt/homebrew/bin/cloudflared',
       ['tunnel', '--no-autoupdate', '--protocol', 'http2', '--url', 'http://127.0.0.1:8796'], 'tunnel.log', local).pid; await saveState(host);
     for (let i = 0; i < 160; i++) {
-      const log = await readFile(join(directory, 'tunnel.log'), 'utf8'), address = log.match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/)?.[0];
+      const log = await readFile(join(directory, 'tunnel.log'), 'utf8');
+      if (!alive(host.tunnel)) throw new Error(tunnelFailureMessage(log));
+      const address = quickTunnelAddress(log);
       if (address) { host.address = address; break; }
-      if (!alive(host.tunnel)) throw new Error('Uuden Studion etäyhteys ei käynnistynyt.'); await pause();
+      await pause();
     }
     if (!host.address) throw new Error('Etäyhteyden osoitetta ei saatu.');
   }
