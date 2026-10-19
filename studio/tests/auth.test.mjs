@@ -7,6 +7,7 @@ import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createStudioServer } from '../server.mjs';
+import { sessionCache, needsLogin } from '../session-cache.mjs';
 
 function fixture(login = 'juhosarvanco', options = {}) {
   let now = 100000, polls = 0; const calls = [];
@@ -100,6 +101,41 @@ test('session endpoint renews expired access tokens after restart and logout inv
   assert.equal((await fetch(base + '/api/logout', { method: 'POST', headers })).status, 200);
   assert.equal((await fetch(base + '/api/studio-session', { headers })).status, 401);
   assert.equal((await fetch(base + '/api/versions', { headers: { authorization: `Bearer ${renewed.token}` } })).status, 401);
+});
+
+test('a reopened browser reconnects after a server outage at a new address without another GitHub authorization', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'althea-outage-login-'));
+  const secret = 'a-private-outage-test-secret-at-least-32';
+  const { auth, settings, calls, advance } = fixture('juhosarvanco', { directory, secret });
+  const attempt = await auth.begin('address'); advance(5000); await auth.poll(attempt.id); advance(5000);
+  const result = await auth.poll(attempt.id);
+  const storage = () => {
+    const data = new Map();
+    return { getItem: key => data.get(key) || null, setItem: (key, value) => data.set(key, value), removeItem: key => data.delete(key) };
+  };
+  const persistent = storage();
+  sessionCache(persistent, storage()).save({ ...result, token: issueStudioToken(result.user, secret, Date.now() - 901000) });
+  const reopened = sessionCache(persistent, storage());
+  const options = { port: 0, dataDir: directory, secret, allowed: ['juhosarvanco'], origins: ['https://editor.example'] };
+  let server = await createStudioServer({ ...options, login: auth });
+  t.after(async () => { await server.close(); await rm(directory, { recursive: true, force: true }); });
+  const oldAddress = `http://127.0.0.1:${server.port}`;
+  await server.close();
+  await assert.rejects(fetch(oldAddress + '/api/studio-session', { signal: AbortSignal.timeout(1000) }), error => {
+    assert.equal(needsLogin(error), false);
+    return true;
+  });
+  advance(2 * 86400000);
+  server = await createStudioServer({ ...options, login: new GithubLogin(settings) });
+  const response = await fetch(`http://127.0.0.1:${server.port}/api/studio-session`, {
+    headers: { authorization: `Bearer ${reopened.credential()}`, origin: options.origins[0] }
+  });
+  assert.equal(response.status, 200);
+  const resumed = await response.json(); reopened.save(resumed);
+  assert.equal(resumed.user.login, 'juhosarvanco');
+  assert.equal(verifyStudioToken(resumed.token, secret, options.allowed).sub, 'juhosarvanco');
+  assert.equal(calls.filter(call => call.url.endsWith('/device/code')).length, 1);
+  assert.equal(reopened.credential(), `althea-remember.${result.remember}`);
 });
 test('GitHub login refuses other accounts, expired requests and excessive starts', async () => {
   const { auth, advance } = fixture('someone-else'); const attempt = await auth.begin('address');

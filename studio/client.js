@@ -397,14 +397,17 @@ function recoverSession() {
   }, 10000);
 }
 function sessionFailure(error) {
-  if (needsLogin(error)) {
+  const loginRequired = needsLogin(error);
+  if (loginRequired) {
     awaitingLogin = true; clearTimeout(recoveryTimer); credentials.clear();
     provider?.disconnect(); connected = false; status();
   } else recoverSession();
-  if (needsLogin(error) || !mounted) {
-    $('#studio-gate-message').textContent = needsLogin(error)
-      ? 'Kirjaudu omalla GitHub-tunnuksellasi. Muutokset tallentuvat tähän erilliseen Studioon.' : connectionMessage(error);
-    $('#studio-login').hidden = false;
+  if (loginRequired || !mounted) {
+    $('#studio-gate-message').textContent = loginRequired
+      ? 'Kirjaudu omalla GitHub-tunnuksellasi. Muutokset tallentuvat tähän erilliseen Studioon.'
+      : `${credentials.credential(session) ? 'Kirjautumisesi on tallessa. ' : ''}${connectionMessage(error)} Yhteyttä yritetään automaattisesti uudelleen.`;
+    $('#studio-login').hidden = !loginRequired;
+    $('#studio-reconnect').hidden = loginRequired;
     if (!$('#studio-gate').open) $('#studio-gate').showModal();
   } else toast('Yhteys odottaa. Kirjautuminen säilyy ja yhteyttä yritetään uudelleen.');
 }
@@ -421,7 +424,19 @@ async function renewSession() {
   catch (error) { sessionFailure(error); }
 }
 let loginSequence = 0;
+$('#studio-reconnect').onclick = async () => {
+  const button = $('#studio-reconnect');
+  button.disabled = true;
+  try { if (provider) await renewSession(); else await start(); }
+  finally { button.disabled = false; }
+};
 $('#studio-login').onclick = async () => {
+  // A gate left open during an outage must resume the saved login before
+  // requesting another GitHub device code.
+  if (credentials.credential(session)) {
+    if (provider) await renewSession(); else await start();
+    return;
+  }
   const sequence = ++loginSequence, button = $('#studio-login');
   button.disabled = true; loginActive = true;
   try {
@@ -507,7 +522,8 @@ $('#studio-logout').onclick = async () => {
     provider?.awareness.setLocalState(null); provider?.disconnect(); connected = false;
     credentials.clear(); session = null; renderPeople(); status();
     $('#studio-gate-message').textContent = 'Olet kirjautunut ulos. Tallennettu työversio säilyy.';
-    $('#studio-login').hidden = false; if (!$('#studio-gate').open) $('#studio-gate').showModal();
+    $('#studio-login').hidden = false; $('#studio-reconnect').hidden = true;
+    if (!$('#studio-gate').open) $('#studio-gate').showModal();
   } catch (error) { toast(connectionMessage(error)); }
 };
 function setAnnotationMode(value) {
