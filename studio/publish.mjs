@@ -63,7 +63,7 @@ export class GithubPublisher {
       for (const asset of assets) {
         const target = join(this.site, asset.path); await writeFile(target + '.next', Buffer.from(asset.content, 'base64')); await rename(target + '.next', target);
       }
-      return { baselineUpdated: true, commit: `https://github.com/${REPOSITORY}/commit/${nextCommit.sha}`, website: 'https://www.althea.fi/' };
+      return { baselineUpdated: true, commit: `https://github.com/${REPOSITORY}/commit/${nextCommit.sha}`, website: 'https://juhosarvanco.github.io/althea-studio-uusi/' };
     } finally { this.busy = false; }
   }
 }

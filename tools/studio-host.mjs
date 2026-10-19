@@ -11,7 +11,7 @@ import { quickTunnelAddress, tunnelFailureMessage } from './studio-tunnel.mjs';
 const run = promisify(execFile);
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..'), directory = join(root, '.studio-live');
 const statePath = join(directory, 'host.json'), envPath = join(root, '.env.studio');
-const repository = 'juhosarvanco/althea-studio-uusi', editor = 'https://www.althea.fi/studio/';
+const repository = 'juhosarvanco/althea-studio-uusi', editor = 'https://juhosarvanco.github.io/althea-studio-uusi/studio/';
 const pause = () => new Promise(resolve => setTimeout(resolve, 250));
 const alive = pid => { if (!pid) return false; try { process.kill(pid, 0); return true; } catch { return false; } };
 const state = async () => { try { return JSON.parse(await readFile(statePath, 'utf8')); } catch { return {}; } };
