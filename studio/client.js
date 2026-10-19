@@ -22,6 +22,9 @@ let historyRequest = 0, historyField = null, historyTimer, archiveTimer;
 let layout = null, pendingLayout = null, layoutRequest = 0, composing = false, refreshingLayout = false;
 let annotating = false, showResolvedComments = false, commentDraft = '', selectedCommentKey = '';
 const credentials = sessionCache(localStorage, sessionStorage);
+// Pages can briefly serve an older HTML document alongside the new script.
+if (!$('#studio-reconnect')) $('#studio-login').insertAdjacentHTML('afterend',
+  '<button id="studio-reconnect" class="studio-primary" type="button" hidden>Yritä yhteyttä uudelleen</button>');
 let sessionRequest, recoveryTimer, starting, awaitingLogin = false, loginActive = false;
 const mediaMode = createMediaMode({ api, getSession: () => session, getHeading: id => editors.get(id)?.getText(),
   container: document.querySelector('#studio-panel-content'), toast: message => toast(message), isConnected: () => connected,
