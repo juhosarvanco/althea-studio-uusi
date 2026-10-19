@@ -3,8 +3,8 @@
 Tämä on oma, erillinen kopio Althean uudesta sivustoversiosta.
 Vanhan sivuston repo, Studio, tekstit, kommentit ja historia eivät kuulu tähän tallennukseen.
 
-- Sivusto: https://juhosarvanco.github.io/althea-studio-uusi/
-- Studio: https://juhosarvanco.github.io/althea-studio-uusi/studio/
+- Sivusto: https://www.althea.fi/
+- Studio: https://www.althea.fi/studio/
 - Repo: https://github.com/juhosarvanco/althea-studio-uusi
 
 ## Julian ja Juhon yhteismuokkaus

@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 const run = promisify(execFile);
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const directory = join(root, '.studio-live'), lockPath = join(directory, 'launch.lock');
-const editor = 'https://juhosarvanco.github.io/althea-studio-uusi/studio/';
+const editor = 'https://www.althea.fi/studio/';
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 let ownsLock = false;
 

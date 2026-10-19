@@ -10,8 +10,9 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 await build({ entryPoints: [join(root, 'tools/public-app.js')], bundle: true, format: 'iife',
   outfile: join(root, 'site/app.js'), target: ['es2022'],
   banner: { js: '// Generated from tools/public-app.js and site/gallery.js. Edit those sources and run npm run build.' } });
-const base = process.env.STUDIO_BASE_PATH || '/althea-studio-uusi/';
-if (!/^\/[a-zA-Z0-9_/-]*\/$/.test(base) && base !== '/') throw new Error('Invalid site base path');
+// Relative links work both under the repository path and on the custom domain.
+const base = process.env.STUDIO_BASE_PATH || '../';
+if (!/^\/[a-zA-Z0-9_/-]*\/$/.test(base) && !['/', '../'].includes(base)) throw new Error('Invalid site base path');
 const { document, manifest, template } = prepareTemplate(await readFile(join(root, 'site/index.html'), 'utf8'));
 // Keep hash navigation on /studio/ while loading site assets from the root.
 for (const el of document.querySelectorAll('[src], [href], [srcset]')) {

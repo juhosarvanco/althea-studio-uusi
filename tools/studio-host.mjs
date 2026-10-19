@@ -11,7 +11,7 @@ import { quickTunnelAddress, tunnelFailureMessage } from './studio-tunnel.mjs';
 const run = promisify(execFile);
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..'), directory = join(root, '.studio-live');
 const statePath = join(directory, 'host.json'), envPath = join(root, '.env.studio');
-const repository = 'juhosarvanco/althea-studio-uusi', editor = 'https://juhosarvanco.github.io/althea-studio-uusi/studio/';
+const repository = 'juhosarvanco/althea-studio-uusi', editor = 'https://www.althea.fi/studio/';
 const pause = () => new Promise(resolve => setTimeout(resolve, 250));
 const alive = pid => { if (!pid) return false; try { process.kill(pid, 0); return true; } catch { return false; } };
 const state = async () => { try { return JSON.parse(await readFile(statePath, 'utf8')); } catch { return {}; } };
@@ -30,7 +30,7 @@ async function settings() {
   try { return parseEnv(await readFile(envPath, 'utf8')); }
   catch (error) { if (error.code !== 'ENOENT') throw error; }
   const env = { STUDIO_SECRET: randomBytes(32).toString('hex'), STUDIO_HOST: '127.0.0.1', STUDIO_PORT: '8796',
-    STUDIO_ORIGINS: 'https://juhosarvanco.github.io,http://127.0.0.1:8796,http://localhost:8796',
+    STUDIO_ORIGINS: 'https://www.althea.fi,https://althea.fi,https://juhosarvanco.github.io,http://127.0.0.1:8796,http://localhost:8796',
     ALLOWED_LOGINS: 'juhosarvanco,juliagrahn', GITHUB_CLIENT_ID: 'Ov23liJL2aMaIb0sJPfn' };
   await writeFile(envPath, Object.entries(env).map(([key, value]) => `${key}=${value}`).join('\n') + '\n', { mode: 0o600 }); return env;
 }

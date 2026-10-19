@@ -7,7 +7,7 @@ export function connectionMessage(error) {
 }
 
 export function sitePath(path = '') {
-  return `${['localhost', '127.0.0.1'].includes(location.hostname) ? '/' : SITE_BASE}${path}`;
+  return `${location.hostname === 'juhosarvanco.github.io' ? SITE_BASE : '/'}${path}`;
 }
 
 let configuration;
