@@ -84,6 +84,33 @@
     return refresh;
   }
 
+  // tools/public-copy.js
+  var copy = {
+    fi: {
+      privacyTitle: "Yhteydenottolomakkeen tietojen k\xE4sittely",
+      privacy: "Lomakkeella antamasi nimi, s\xE4hk\xF6postiosoite ja viesti v\xE4litet\xE4\xE4n FormSubmit-palvelun kautta osoitteeseen info@althea.fi. K\xE4yt\xE4mme tietoja yhteydenottoosi vastaamiseen ja tutustumiskeskustelun sopimiseen. FormSubmit s\xE4ilytt\xE4\xE4 lomakeviestit palvelussaan 30 p\xE4iv\xE4\xE4. \xC4l\xE4 l\xE4het\xE4 lomakkeella terveystietoja tai muita arkaluonteisia tietoja. Voit kysy\xE4 tietojesi k\xE4sittelyst\xE4 tai pyyt\xE4\xE4 niiden poistamista osoitteesta info@althea.fi.",
+      termsTitle: "Varaus- ja peruutusehdot",
+      terms: "Yhteydenottopyynn\xF6n l\xE4hett\xE4minen ei ole varaus eik\xE4 edellyt\xE4 maksua. Ohjelman varaus- ja peruutusehdot k\xE4yd\xE4\xE4n l\xE4pi erikseen ennen varauksen vahvistamista.",
+      sending: "L\xE4hetet\xE4\xE4n\u2026",
+      pending: "L\xE4hetet\xE4\xE4n yhteydenottopyynt\xF6\xE4\u2026",
+      success: "Kiitos! Yhteydenottopyynt\xF6si on l\xE4hetetty. Vastaamme kahden arkip\xE4iv\xE4n kuluessa.",
+      error: "L\xE4hetys ei onnistunut. Tietosi ovat tallella lomakkeessa. Yrit\xE4 uudelleen tai l\xE4het\xE4 viesti osoitteeseen info@althea.fi."
+    },
+    en: {
+      privacyTitle: "How we use your contact details",
+      privacy: "The name, email address and message you enter in this form are forwarded via FormSubmit to info@althea.fi. We use these details to reply to your enquiry and arrange an introductory call. FormSubmit retains form submissions on its servers for 30 days. Please do not send health information or other sensitive information through this form. You can ask about how we handle your details or request their deletion by emailing info@althea.fi.",
+      termsTitle: "Booking and cancellation terms",
+      terms: "Sending a contact request does not make a booking or require payment. The programme\u2019s booking and cancellation terms will be discussed separately before your booking is confirmed.",
+      sending: "Sending\u2026",
+      pending: "Sending your request\u2026",
+      success: "Thank you! Your request has been sent. We\u2019ll reply within two working days.",
+      error: "Your message could not be sent. Your details are still in the form. Please try again or email info@althea.fi."
+    }
+  };
+  function publicCopy(document2) {
+    return copy[document2.documentElement?.lang?.toLowerCase().split("-")[0]] || copy.fi;
+  }
+
   // tools/contact-form.js
   async function sendContactRequest(action, data, request = fetch) {
     const endpoint = new URL(action);
@@ -102,6 +129,7 @@
   function startContactForm(document2, request = fetch) {
     const form = document2.querySelector("#contact-form");
     if (!form) return;
+    const copy2 = publicCopy(document2);
     const status = document2.querySelector("#contact-status");
     const submit = form.querySelector('[type="submit"]');
     const label = submit.textContent;
@@ -116,17 +144,17 @@
         control.disabled = true;
       });
       form.setAttribute("aria-busy", "true");
-      submit.textContent = "L\xE4hetet\xE4\xE4n\u2026";
+      submit.textContent = copy2.sending;
       status.dataset.state = "pending";
-      status.textContent = "L\xE4hetet\xE4\xE4n yhteydenottopyynt\xF6\xE4\u2026";
+      status.textContent = copy2.pending;
       try {
         await sendContactRequest(form.action, data, request);
         form.reset();
         status.dataset.state = "success";
-        status.textContent = "Kiitos! Yhteydenottopyynt\xF6si on l\xE4hetetty. Vastaamme kahden arkip\xE4iv\xE4n kuluessa.";
+        status.textContent = copy2.success;
       } catch {
         status.dataset.state = "error";
-        status.textContent = "L\xE4hetys ei onnistunut. Tietosi ovat tallella lomakkeessa. Yrit\xE4 uudelleen tai l\xE4het\xE4 viesti osoitteeseen info@althea.fi.";
+        status.textContent = copy2.error;
       } finally {
         sending = false;
         controls.forEach(([control, disabled]) => {
@@ -142,12 +170,13 @@
   (() => {
     startGalleries();
     const $ = (selector) => document.querySelector(selector);
+    const copy2 = publicCopy(document);
     for (const profiles of document.querySelectorAll(".profiles")) profiles.style.alignItems = "start";
     const policy = $("#policy-dialog");
     for (const button of document.querySelectorAll("[data-policy]")) button.addEventListener("click", () => {
       const privacy = button.dataset.policy === "privacy";
-      $("#policy-title").textContent = privacy ? "Yhteydenottolomakkeen tietojen k\xE4sittely" : "Varaus- ja peruutusehdot";
-      $("#policy-copy").textContent = privacy ? "Lomakkeella antamasi nimi, s\xE4hk\xF6postiosoite ja viesti v\xE4litet\xE4\xE4n FormSubmit-palvelun kautta osoitteeseen info@althea.fi. K\xE4yt\xE4mme tietoja yhteydenottoosi vastaamiseen ja tutustumiskeskustelun sopimiseen. FormSubmit s\xE4ilytt\xE4\xE4 lomakeviestit palvelussaan 30 p\xE4iv\xE4\xE4. \xC4l\xE4 l\xE4het\xE4 lomakkeella terveystietoja tai muita arkaluonteisia tietoja. Voit kysy\xE4 tietojesi k\xE4sittelyst\xE4 tai pyyt\xE4\xE4 niiden poistamista osoitteesta info@althea.fi." : "Yhteydenottopyynn\xF6n l\xE4hett\xE4minen ei ole varaus eik\xE4 edellyt\xE4 maksua. Ohjelman varaus- ja peruutusehdot k\xE4yd\xE4\xE4n l\xE4pi erikseen ennen varauksen vahvistamista.";
+      $("#policy-title").textContent = privacy ? copy2.privacyTitle : copy2.termsTitle;
+      $("#policy-copy").textContent = privacy ? copy2.privacy : copy2.terms;
       policy.showModal();
     });
     policy.querySelector("[data-close-dialog]").addEventListener("click", () => policy.close());

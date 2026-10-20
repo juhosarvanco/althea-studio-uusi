@@ -1,18 +1,18 @@
 import { startGalleries } from "../site/gallery.js";
 import { startContactForm } from './contact-form.js';
+import { publicCopy } from './public-copy.js';
 
 (() => {
   startGalleries();
   const $ = selector => document.querySelector(selector);
+  const copy = publicCopy(document);
   // Each biography expands its own card, without stretching the adjacent card.
   for (const profiles of document.querySelectorAll('.profiles')) profiles.style.alignItems = 'start';
   const policy = $('#policy-dialog');
   for (const button of document.querySelectorAll('[data-policy]')) button.addEventListener('click', () => {
     const privacy = button.dataset.policy === 'privacy';
-    $('#policy-title').textContent = privacy ? 'Yhteydenottolomakkeen tietojen käsittely' : 'Varaus- ja peruutusehdot';
-    $('#policy-copy').textContent = privacy
-      ? 'Lomakkeella antamasi nimi, sähköpostiosoite ja viesti välitetään FormSubmit-palvelun kautta osoitteeseen info@althea.fi. Käytämme tietoja yhteydenottoosi vastaamiseen ja tutustumiskeskustelun sopimiseen. FormSubmit säilyttää lomakeviestit palvelussaan 30 päivää. Älä lähetä lomakkeella terveystietoja tai muita arkaluonteisia tietoja. Voit kysyä tietojesi käsittelystä tai pyytää niiden poistamista osoitteesta info@althea.fi.'
-      : 'Yhteydenottopyynnön lähettäminen ei ole varaus eikä edellytä maksua. Ohjelman varaus- ja peruutusehdot käydään läpi erikseen ennen varauksen vahvistamista.';
+    $('#policy-title').textContent = privacy ? copy.privacyTitle : copy.termsTitle;
+    $('#policy-copy').textContent = privacy ? copy.privacy : copy.terms;
     policy.showModal();
   });
   policy.querySelector('[data-close-dialog]').addEventListener('click', () => policy.close());

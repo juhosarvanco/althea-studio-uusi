@@ -7,6 +7,18 @@ Vanhan sivuston repo, Studio, tekstit, kommentit ja historia eivät kuulu tähä
 - Studio: https://www.althea.fi/studio/
 - Repo: https://github.com/juhosarvanco/althea-studio-uusi
 
+## Englanninkielinen tarkistusversio
+
+Englanninkielinen sivu on osoitteessa https://www.althea.fi/en/. Se on erillinen
+20.10.2026 julkaistun suomenkielisen sivun käännös tiedostossa `site/en/index.html`.
+Sivulla ei ole kielenvaihtopainikkeita, eikä suomenkieliseltä sivulta ole siihen linkkiä.
+Hakukoneindeksointi on estetty tarkistuksen ajaksi.
+
+Suomenkielisen Studion julkaisu ei muuta englanninkielistä tarkistusversiota. Käännös
+päivitetään erikseen hyväksymisen jälkeen. Molemmat sivut käyttävät samaa kuvastoa ja
+yhteydenottolomakkeen vastaanottajaa. Lomakkeen viestit ja tietotekstit valitaan sivun
+kielen perusteella tiedostosta `tools/public-copy.js`.
+
 ## Julkinen yhteydenottolomake
 
 Lomake lähettää yhteydenottopyynnöt FormSubmit-palvelun kautta osoitteeseen

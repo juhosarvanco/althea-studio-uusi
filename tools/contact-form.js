@@ -1,3 +1,5 @@
+import { publicCopy } from './public-copy.js';
+
 export async function sendContactRequest(action, data, request = fetch) {
   const endpoint = new URL(action);
   if (endpoint.origin !== 'https://formsubmit.co') throw new Error('Invalid contact endpoint');
@@ -16,6 +18,7 @@ export async function sendContactRequest(action, data, request = fetch) {
 export function startContactForm(document, request = fetch) {
   const form = document.querySelector('#contact-form');
   if (!form) return;
+  const copy = publicCopy(document);
   const status = document.querySelector('#contact-status');
   const submit = form.querySelector('[type="submit"]');
   const label = submit.textContent;
@@ -29,17 +32,17 @@ export function startContactForm(document, request = fetch) {
     sending = true;
     controls.forEach(([control]) => { control.disabled = true; });
     form.setAttribute('aria-busy', 'true');
-    submit.textContent = 'Lähetetään…';
+    submit.textContent = copy.sending;
     status.dataset.state = 'pending';
-    status.textContent = 'Lähetetään yhteydenottopyyntöä…';
+    status.textContent = copy.pending;
     try {
       await sendContactRequest(form.action, data, request);
       form.reset();
       status.dataset.state = 'success';
-      status.textContent = 'Kiitos! Yhteydenottopyyntösi on lähetetty. Vastaamme kahden arkipäivän kuluessa.';
+      status.textContent = copy.success;
     } catch {
       status.dataset.state = 'error';
-      status.textContent = 'Lähetys ei onnistunut. Tietosi ovat tallella lomakkeessa. Yritä uudelleen tai lähetä viesti osoitteeseen info@althea.fi.';
+      status.textContent = copy.error;
     } finally {
       sending = false;
       controls.forEach(([control, disabled]) => { control.disabled = disabled; });
