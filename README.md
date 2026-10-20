@@ -195,3 +195,36 @@ Editorit rakennetaan `site/studio/`- ja `site/en/studio/`-kansioihin.
 GitHub Actions julkaisee vain `site/`-kansion.
 
 Studio-esikatselun lomake ei lähetä viestejä. Julkinen lomake toimii FormSubmitin kautta.
+
+## Studion tietoturva
+
+Vain Juho ja Julia voivat kirjautua. GitHub-käyttäjänimen lisäksi tarkistetaan
+alkuperäisen tilin pysyvä numerotunniste (`studio/auth.mjs`). Uuden käyttäjän
+lisääminen vaatii molempien tunnisteiden hyväksymisen palvelimen asetuksissa ja koodissa.
+GitHubin kaksivaiheinen tunnistautuminen pidetään käytössä molemmilla tileillä.
+
+Muokkaus, kuvat, historia ja julkaisu vaativat allekirjoitetun, voimassa olevan
+istunnon molemmilla kielillä ja molemmilla yhteysreiteillä. Uloskirjautuminen
+mitätöi istunnon ja sulkee myös avoimet muokkausyhteydet. GitHub-tunnukset
+säilytetään vain salattuina Macilla. Julkinen repositorio sisältää sivun lähdekoodin,
+mutta ei salaisia avaimia, kirjautumistietoja tai yhteisiä kommentteja.
+
+Studio estää ylimääräisen ohjelmakoodin suorittamisen selaimessa sekä käynnistymisen
+toisen sivun kehyksessä. Julkaisutyön rakentaminen käyttää vain lukuoikeuksia;
+erillinen julkaisu saa vain GitHub Pagesin tarvitsemat oikeudet. Ulkoiset Actions-osat
+on sidottu tarkkoihin versiotunnisteisiin. Dependabot ehdottaa päivityksiä, mutta
+niitä ei yhdistetä automaattisesti.
+
+Macilla käynnistys käyttää ensisijaisesti `.studio-live/runtime/bin/node`-ohjelmaa,
+jos sellainen on asennettu, ja muuten tavallista Node.js-ohjelmaa. Tietoturvatarkistuksessa
+asennettiin Node.js 22.23.3:n virallinen arm64-versio ja tarkistettiin sen SHA-256-tiiviste.
+Myös tämä ohjelma ja etäyhteysohjelma tarvitsevat myöhemmin tietoturvapäivityksiä.
+
+```sh
+node tools/check-studio-security.mjs
+```
+
+Tarkistus kokeilee ulkopuolisen luku- ja muokkausyrityksiä ilman oikeita tunnuksia
+tai kelvollista julkaisuversiota. GitHubin käsin käynnistettävä yhteystarkistus
+suorittaa saman kokeen ulkoverkosta. Tarkistus ei takaa ehdotonta turvallisuutta:
+GitHub-, Netlify- ja verkkotunnustilien sekä Macin suojaaminen on edelleen välttämätöntä.

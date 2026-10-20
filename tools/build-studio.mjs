@@ -5,6 +5,7 @@ import { join, dirname } from 'node:path';
 import { prepareTemplate } from '../studio/template.mjs';
 import { rewriteAssets } from '../shared/site-assets.mjs';
 import { studioAddress } from '../shared/studio-address.mjs';
+import { studioPolicy } from '../studio/security.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 // A release must never accidentally point visitors at localhost or a LAN IP.
@@ -40,6 +41,11 @@ for (const language of ['fi', 'en']) {
   document.title = `Althea Studio — ${language === 'en' ? 'English' : 'Suomi'}`;
   document.documentElement.setAttribute('data-studio-language', language);
   document.querySelectorAll('script:not([type="application/json"])').forEach(el => el.remove());
+  document.querySelectorAll('meta[http-equiv="Content-Security-Policy"]').forEach(el => el.remove());
+  const policy = document.createElement('meta'); policy.setAttribute('http-equiv', 'Content-Security-Policy');
+  policy.content = studioPolicy(process.env.STUDIO_SERVER_URL || 'http://127.0.0.1:8796', relay);
+  document.head.insertBefore(policy, document.head.firstChild);
+  const referrer = document.createElement('meta'); referrer.name = 'referrer'; referrer.content = 'no-referrer'; document.head.append(referrer);
   document.querySelectorAll('head style').forEach(el => el.setAttribute('data-studio-site-style', ''));
   const robots = document.createElement('meta'); robots.name = 'robots'; robots.content = 'noindex, nofollow'; document.head.append(robots);
   const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = editorBase + 'studio/studio.css'; document.head.append(css);

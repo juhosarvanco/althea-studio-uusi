@@ -5,7 +5,10 @@ if ! cd "$STUDIO_PROJECT"; then
   print '\nStudion kansiota ei löydy. Käynnistys ei onnistunut.'
   exit 1
 fi
-if ! command -v node >/dev/null 2>&1; then
+if [[ -x "$STUDIO_PROJECT/.studio-live/runtime/bin/node" ]]; then
+  "$STUDIO_PROJECT/.studio-live/runtime/bin/node" "$STUDIO_PROJECT/tools/studio-launch.mjs" "$@"
+  STUDIO_RESULT=$?
+elif ! command -v node >/dev/null 2>&1; then
   print '\nStudion käynnistysohjelmaa ei löydy tältä Macilta.'
   STUDIO_RESULT=1
 else

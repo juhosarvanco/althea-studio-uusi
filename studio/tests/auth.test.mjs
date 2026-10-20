@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { GithubLogin, SESSION_DURATION } from '../auth.mjs';
+import { GithubLogin, SESSION_DURATION, ACCOUNT_IDS } from '../auth.mjs';
 import { issueStudioToken, verifyStudioToken } from '../../shared/studio-token.mjs';
 import { createHmac } from 'node:crypto';
 import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
@@ -16,7 +16,7 @@ function fixture(login = 'juhosarvanco', options = {}) {
       calls.push({ url, options });
       const data = url.endsWith('/device/code') ? { device_code: 'private-device-code', user_code: 'ABCD-EFGH', verification_uri: 'https://github.com/login/device', interval: 5, expires_in: 900 }
         : url.endsWith('/access_token') ? (++polls === 1 ? { error: 'authorization_pending' } : { access_token: 'private-github-token' })
-        : { login, name: 'Untrusted display name' };
+        : { login, id: ACCOUNT_IDS[login] || 999999, name: 'Untrusted display name' };
       return new Response(JSON.stringify(data), { headers: { 'content-type': 'application/json' } });
     } };
   const auth = new GithubLogin(settings);
@@ -152,4 +152,33 @@ test('the new Studio rejects an old Studio token even if its signing key were re
   const body = Buffer.from(JSON.stringify({ aud:'althea-studio',sub:'juhosarvanco',iat:Math.floor(Date.now()/1000),exp:Math.floor(Date.now()/1000)+900 })).toString('base64url');
   const signature = createHmac('sha256',secret).update(`${head}.${body}`).digest('base64url');
   assert.throws(() => verifyStudioToken(`${head}.${body}.${signature}`,secret,['juhosarvanco']));
+});
+
+test('a recycled GitHub username cannot log in or renew an existing saved session', async () => {
+  const first = fixture();
+  const upstream = first.auth.fetcher;
+  first.auth.fetcher = (url, options) => url.endsWith('/user')
+    ? Promise.resolve(new Response(JSON.stringify({ login: 'juhosarvanco', id: 999999 }))) : upstream(url, options);
+  const attempt = await first.auth.begin('address'); first.advance(5000); await first.auth.poll(attempt.id); first.advance(5000);
+  await assert.rejects(first.auth.poll(attempt.id), error => error.status === 403);
+  assert.equal(first.auth.sessions.size, 0);
+
+  const second = fixture(), login = await second.auth.begin('address');
+  second.advance(5000); await second.auth.poll(login.id); second.advance(5000);
+  const result = await second.auth.poll(login.id);
+  second.auth.fetcher = async () => new Response(JSON.stringify({ login: 'juhosarvanco', id: 999999 }));
+  await assert.rejects(second.auth.resume(result.remember), error => error.status === 401);
+  assert.equal(second.auth.sessions.size, 0);
+  assert.throws(() => new GithubLogin({ clientId: 'test', allowed: ['unrecognised-account'] }), /pinned numeric account ID/);
+});
+
+test('parallel login requests cannot bypass the global limit while GitHub is responding', async () => {
+  const pending = [];
+  const auth = new GithubLogin({ clientId: 'test', allowed: ['juhosarvanco'], fetcher: () => new Promise(resolve => pending.push(resolve)) });
+  const attempts = Array.from({ length: 10 }, (_, i) => auth.begin(`address-${i}`));
+  await assert.rejects(auth.begin('another-address'), error => error.status === 429);
+  assert.equal(pending.length, 10);
+  for (const resolve of pending) resolve(new Response(JSON.stringify({ device_code: 'test-device', user_code: 'TEST-CODE', verification_uri: 'https://github.com/login/device' })));
+  await Promise.all(attempts);
+  assert.equal(auth.starting, 0); assert.equal(auth.attempts.size, 10);
 });

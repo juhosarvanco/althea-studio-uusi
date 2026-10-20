@@ -15,6 +15,9 @@ import { sessionCache, needsLogin } from './session-cache.mjs';
 import { participants } from './presence.mjs';
 import { HttpSocket } from './http-socket.js';
 import { connectionRequest } from './connection.js';
+import { requireTopLevel } from './security.mjs';
+
+requireTopLevel(window, document);
 
 const $ = selector => document.querySelector(selector);
 const language = studioLanguage();

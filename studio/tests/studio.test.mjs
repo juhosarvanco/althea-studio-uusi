@@ -136,7 +136,7 @@ test('remote service blocks anonymous access, foreign origins, development imper
   assert.equal((await fetch(base + '/api/studio-session?name=juho')).status, 401);
   const token = issueStudioToken({ login: 'juho', name: 'Juho' }, secret);
   assert.equal((await fetch(base + '/api/versions', { headers: { authorization: `Bearer ${token}`, Origin: 'https://bad.example' } })).status, 403);
-  const response = await fetch(base + '/api/export', { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify({ vector: 'old' }) });
+  const response = await fetch(base + '/api/export', { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', Origin: 'https://editor.example' }, body: JSON.stringify({ vector: 'old' }) });
   assert.equal(response.status, 409);
   const socket = new WS(base.replace('http', 'ws') + '/sync/althea-uusi', [`althea-auth.${token}`], { headers: { Origin: 'https://bad.example' } });
   await new Promise(resolve => { socket.on('error', resolve); socket.on('unexpected-response', (_, response) => { assert.equal(response.statusCode, 401); response.resume(); socket.terminate(); resolve(); }); });

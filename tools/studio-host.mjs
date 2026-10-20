@@ -1,5 +1,5 @@
 import { readFile, writeFile, mkdir, chmod, cp } from 'node:fs/promises';
-import { openSync, closeSync } from 'node:fs';
+import { openSync, closeSync, existsSync } from 'node:fs';
 import { parseEnv } from 'node:util';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,6 +12,8 @@ import { ensureRelay } from './studio-relay.mjs';
 const run = promisify(execFile);
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..'), directory = join(root, '.studio-live');
 const statePath = join(directory, 'host.json'), envPath = join(root, '.env.studio');
+const privateNode = join(directory, 'runtime/bin/node');
+const node = existsSync(privateNode) ? privateNode : process.execPath;
 const repository = 'juhosarvanco/althea-studio-uusi', editor = 'https://www.althea.fi/studio/';
 const pause = () => new Promise(resolve => setTimeout(resolve, 250));
 const alive = pid => { if (!pid) return false; try { process.kill(pid, 0); return true; } catch { return false; } };
@@ -41,7 +43,7 @@ function launch(command, args, file, local) {
   closeSync(fd); child.on('error', () => {}); child.unref(); return child;
 }
 async function startServer(local) {
-  const child = launch(process.execPath, [join(root, 'studio/server.mjs')], 'server.log', local);
+  const child = launch(node, [join(root, 'studio/server.mjs')], 'server.log', local);
   for (let i = 0; i < 80; i++) {
     if (!alive(child.pid)) throw new Error('Uusi palvelin ei käynnistynyt. Tarkista tämän repon .studio-live/server.log.');
     if (await studioReachable('http://127.0.0.1:8796', { timeoutMs: 1000 })) return child.pid;
@@ -49,7 +51,7 @@ async function startServer(local) {
   }
   throw new Error('Uusi palvelin ei vastaa.');
 }
-async function build(address) { await run(process.execPath, [join(root, 'tools/build-studio.mjs')], { cwd: root, env: { ...process.env, STUDIO_SERVER_URL: address }, maxBuffer: 2 * 1024 * 1024 }); }
+async function build(address) { await run(node, [join(root, 'tools/build-studio.mjs')], { cwd: root, env: { ...process.env, STUDIO_SERVER_URL: address }, maxBuffer: 2 * 1024 * 1024 }); }
 async function publishConnection(host) {
   const relay = await ensureRelay(host.address);
   await build(host.address);

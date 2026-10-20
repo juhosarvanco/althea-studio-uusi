@@ -16,7 +16,7 @@ export function relayFiles(target) {
   const upstream = studioAddress(target);
   return {
     '/_redirects': `/api/local-layout /404.html 404!\n/api/en/local-layout /404.html 404!\n/health ${upstream}/health 200!\n/api/* ${upstream}/api/:splat 200!\n`,
-    '/_headers': '/*\n  Cache-Control: no-store\n  X-Robots-Tag: noindex, nofollow\n  X-Content-Type-Options: nosniff\n',
+    '/_headers': "/*\n  Cache-Control: no-store\n  X-Robots-Tag: noindex, nofollow\n  X-Content-Type-Options: nosniff\n  X-Frame-Options: DENY\n  Referrer-Policy: no-referrer\n  Content-Security-Policy: default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'\n",
     '/robots.txt': 'User-agent: *\nDisallow: /\n',
     '/404.html': '<!doctype html><title>Althea</title><p>Not found.</p>',
     '/index.html': '<!doctype html><html lang="fi"><meta name="robots" content="noindex,nofollow"><title>Althea Studio — yhteys</title><p>Althea Studion yhteyspalvelu.</p><p><a href="https://www.althea.fi/studio/">Avaa Studio</a></p></html>'

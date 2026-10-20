@@ -3,12 +3,17 @@ import { SessionFile } from './sessions.mjs';
 
 const fail = (message, status = 400) => { const error = new Error(message); error.status = status; throw error; };
 const profileNames = { juhosarvanco: 'Juho Sarvanko', juliagrahn: 'Julia Grahn' };
+// Usernames can change owners. Access also requires the original account ID.
+export const ACCOUNT_IDS = Object.freeze({ juhosarvanco: 206859167, juliagrahn: 321304602 });
 export const SESSION_DURATION = 30 * 24 * 60 * 60 * 1000;
 const digest = value => createHash('sha256').update(value).digest('hex');
 
 export class GithubLogin {
-  constructor({ clientId, allowed, fetcher = fetch, now = Date.now, directory, secret }) {
+  constructor({ clientId, allowed, accountIds = ACCOUNT_IDS, fetcher = fetch, now = Date.now, directory, secret }) {
+    if (!allowed.every(login => Number.isSafeInteger(accountIds[login]) && accountIds[login] > 0))
+      throw new Error('Every authorised GitHub account needs a pinned numeric account ID.');
     this.clientId = clientId; this.allowed = allowed; this.fetcher = fetcher; this.now = now;
+    this.accountIds = accountIds; this.starting = 0;
     this.attempts = new Map(); this.sessions = new Map(); this.rate = new Map();
     this.file = directory ? new SessionFile(directory, secret) : null;
     for (const [id, session] of this.file?.read() || []) {
@@ -18,6 +23,7 @@ export class GithubLogin {
     }
   }
   save() { this.file?.write([...this.sessions]); }
+  permits(profile) { return this.allowed.includes(profile.login) && profile.id === this.accountIds[profile.login]; }
   async github(url, body, token) {
     const response = await this.fetcher(url, { method: body ? 'POST' : 'GET',
       headers: { accept: 'application/json', 'user-agent': 'Althea-Studio-Uusi',
@@ -40,16 +46,19 @@ export class GithubLogin {
     if (!this.clientId) fail('GitHub-kirjautumissovelluksen käyttöönotto on vielä kesken.', 503);
     this.clean();
     const current = this.rate.get(ip) || { count: 0, until: this.now() + 60000 };
-    if (++current.count > 5 || this.attempts.size >= 100 || this.rate.size >= 1000) fail('Odota hetki ennen uutta kirjautumisyritystä.', 429);
+    if (++current.count > 5 || this.attempts.size + this.starting >= 100 || this.starting >= 10 || this.rate.size >= 1000) fail('Odota hetki ennen uutta kirjautumisyritystä.', 429);
     this.rate.set(ip, current);
-    // Empty scope identifies the GitHub account without requesting repository access.
-    const data = await this.github('https://github.com/login/device/code', { client_id: this.clientId, scope: '' });
-    if (data.error || !data.device_code || !data.user_code || data.verification_uri !== 'https://github.com/login/device')
-      fail(data.error === 'device_flow_disabled' ? 'GitHub-sovelluksen Device Flow pitää ottaa käyttöön.' : 'GitHub-kirjautumista ei voitu aloittaa.', 503);
-    const id = randomBytes(32).toString('base64url'), interval = Math.max(5, data.interval || 5);
-    const expires = this.now() + Math.min(900, data.expires_in || 900) * 1000;
-    this.attempts.set(id, { device: data.device_code, interval, next: this.now() + interval * 1000, expires, busy: false });
-    return { id, code: data.user_code, verification: data.verification_uri, interval, expiresIn: Math.floor((expires - this.now()) / 1000) };
+    this.starting++;
+    try {
+      // Empty scope identifies the GitHub account without requesting repository access.
+      const data = await this.github('https://github.com/login/device/code', { client_id: this.clientId, scope: '' });
+      if (data.error || !data.device_code || !data.user_code || data.verification_uri !== 'https://github.com/login/device')
+        fail(data.error === 'device_flow_disabled' ? 'GitHub-sovelluksen Device Flow pitää ottaa käyttöön.' : 'GitHub-kirjautumista ei voitu aloittaa.', 503);
+      const id = randomBytes(32).toString('base64url'), interval = Math.max(5, data.interval || 5);
+      const expires = this.now() + Math.min(900, data.expires_in || 900) * 1000;
+      this.attempts.set(id, { device: data.device_code, interval, next: this.now() + interval * 1000, expires, busy: false });
+      return { id, code: data.user_code, verification: data.verification_uri, interval, expiresIn: Math.floor((expires - this.now()) / 1000) };
+    } finally { this.starting--; }
   }
   async poll(id) {
     this.clean();
@@ -68,7 +77,7 @@ export class GithubLogin {
       }
       const profile = await this.github('https://api.github.com/user', null, result.access_token);
       this.attempts.delete(id);
-      if (!this.allowed.includes(profile.login)) fail('Tällä GitHub-tunnuksella ei ole muokkausoikeutta tähän Studioon.', 403);
+      if (!this.permits(profile)) fail('Tällä GitHub-tunnuksella ei ole muokkausoikeutta tähän Studioon.', 403);
       this.clean();
       if (this.sessions.size >= 100) fail('Liian monta kirjautumista. Kirjaudu ensin ulos toisesta selaimesta.', 429);
       const sid = randomBytes(32).toString('base64url'), remember = randomBytes(32).toString('base64url');
@@ -106,7 +115,7 @@ export class GithubLogin {
     let profile;
     try { profile = await this.github('https://api.github.com/user', null, session.token); }
     catch (error) { if (error.status === 401) { this.sessions.delete(user.sid); this.save(); } throw error; }
-    if (profile.login !== user.sub || !this.allowed.includes(profile.login)) { this.sessions.delete(user.sid); this.save(); fail('GitHub-kirjautuminen ei ole enää voimassa.', 401); }
+    if (profile.login !== user.sub || !this.permits(profile)) { this.sessions.delete(user.sid); this.save(); fail('GitHub-kirjautuminen ei ole enää voimassa.', 401); }
     return session.user;
   }
 }

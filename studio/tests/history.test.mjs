@@ -26,7 +26,7 @@ function client(server, login) {
   const provider = new WebsocketProvider(`ws://127.0.0.1:${server.port}/sync`, 'althea-uusi', doc, { WebSocketPolyfill: Socket, disableBc: true });
   provider.messageHandlers[4] = () => {};
   const api = async (path, body) => fetch(`http://127.0.0.1:${server.port}${path}`, {
-    method: body ? 'POST' : 'GET', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    method: body ? 'POST' : 'GET', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', Origin: `http://127.0.0.1:${server.port}` },
     ...(body ? { body: JSON.stringify(body) } : {}) });
   return { doc, provider, api, close: () => { provider.destroy(); doc.destroy(); } };
 }

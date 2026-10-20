@@ -77,7 +77,9 @@ export async function createStudioServer(options = {}) {
   function response(req, res, status, body, headers = {}) {
     const origin = req.headers.origin;
     res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store',
-      'x-content-type-options': 'nosniff', ...(acceptedOrigins.has(origin) ? { 'access-control-allow-origin': origin, vary: 'Origin' } : {}), ...headers });
+      'x-content-type-options': 'nosniff', 'x-frame-options': 'DENY', 'referrer-policy': 'no-referrer',
+      'content-security-policy': `frame-ancestors 'none'; base-uri 'none'${headers['content-type']?.startsWith('text/html') ? '' : "; default-src 'none'"}`,
+      ...(acceptedOrigins.has(origin) ? { 'access-control-allow-origin': origin, vary: 'Origin' } : {}), ...headers });
     res.end(typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body));
   }
   const http = createServer(async (req, res) => {
@@ -137,6 +139,8 @@ export async function createStudioServer(options = {}) {
             return response(req, res, 403, { error: 'Local operator only' });
           user = { sub: 'althea-layout', name: 'Ulkoasupäivitys' };
         } else user = authenticate(req);
+        if (!localLayout && req.method === 'POST' && !acceptedOrigins.has(req.headers.origin))
+          return response(req, res, 403, { error: 'Origin not allowed' });
         if (req.method === 'POST' && ['/api/poll-open', '/api/poll-read', '/api/poll-send', '/api/poll-close'].includes(path)) {
           if (!acceptedOrigins.has(req.headers.origin)) return response(req, res, 403, { error: 'Origin not allowed' });
           return response(req, res, 200, await polling.handle(path, await readBody(req, 1024 * 1024), user, context, connectSocket));
@@ -176,10 +180,6 @@ export async function createStudioServer(options = {}) {
           return response(req, res, 200, store.fieldHistory(url.searchParams.get('fieldId')));
         if (req.method === 'POST' && path === '/api/field-restore')
           return response(req, res, 200, store.restoreField(body.fieldId, body.id, body.expectedHash, body.versionHash, user));
-        if (req.method === 'POST' && path === '/api/published') {
-          store.published(body.previousHash, body.publicHash);
-          store.checkpoint('Julkaistu sivustolle', user.name); return response(req, res, 200, { ok: true });
-        }
         if (req.method === 'POST' && ['/api/export', '/api/checkpoint', '/api/restore'].includes(path)) {
           if (body.vector !== vector(store.doc)) return response(req, res, 409, { error: 'Sisältö muuttui. Odota tallennusta ja yritä uudelleen.' });
           if (path === '/api/export') {
@@ -206,6 +206,10 @@ export async function createStudioServer(options = {}) {
       return response(req, res, 200, data, { 'content-type': TYPES[extname(file)] || 'application/octet-stream' });
     } catch (error) { response(req, res, error.status || (error.code === 'ENOENT' ? 404 : 400), { error: error.message }); }
   });
+  http.headersTimeout = 10000;
+  http.requestTimeout = 30000;
+  http.maxHeadersCount = 50;
+  http.maxRequestsPerSocket = 100;
   const sockets = new WebSocketServer({ noServer: true, maxPayload: 512 * 1024,
     handleProtocols: protocols => [...protocols].find(value => value.startsWith('althea-auth.')) || false });
   http.on('upgrade', (req, socket, head) => {
