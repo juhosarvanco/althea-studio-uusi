@@ -84,6 +84,8 @@ export function startPageBehavior() {
     const header = document.querySelector('.site-header');
     if (!backdrop || !header) return;
     const y = window.scrollY, visibleTop = header.getBoundingClientRect().bottom;
+    const footerTop = document.querySelector('.site-footer')?.getBoundingClientRect().top ?? window.innerHeight;
+    backdrop.style.clipPath = `inset(0 0 ${Math.max(0, window.innerHeight - footerTop)}px 0)`;
     const radius = Number.parseFloat(getComputedStyle(document.querySelector('main')).getPropertyValue('--panel-radius')) || 64;
     const coverage = panel => {
       const rect = panel.getBoundingClientRect();

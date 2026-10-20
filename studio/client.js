@@ -569,6 +569,9 @@ $('#studio-publish').onclick = async () => {
     toast(result.unchanged ? 'Sivusto on jo ajan tasalla.' : 'Julkaistu uuteen GitHub-repoon. GitHub Pages päivittyy hetken kuluttua.'); status();
   } catch (error) { toast(error.message); status(); }
 };
-document.querySelector('main form')?.addEventListener('submit', event => event.preventDefault());
+// Layout updates replace the form; keep email delivery disabled inside Studio.
+document.addEventListener('submit', event => {
+  if (event.target.matches('main #contact-form')) event.preventDefault();
+});
 window.addEventListener('beforeunload', event => { if (mounted && (!durable() || commentDraft.trim())) { event.preventDefault(); event.returnValue = ''; } });
 start();

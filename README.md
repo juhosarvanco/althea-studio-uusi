@@ -7,6 +7,21 @@ Vanhan sivuston repo, Studio, tekstit, kommentit ja historia eivät kuulu tähä
 - Studio: https://www.althea.fi/studio/
 - Repo: https://github.com/juhosarvanco/althea-studio-uusi
 
+## Julkinen yhteydenottolomake
+
+Lomake lähettää yhteydenottopyynnöt FormSubmit-palvelun kautta osoitteeseen
+`info@althea.fi`, myös Studion palvelimen ollessa pois päältä. Vierailijan sähköposti
+on viestin vastausosoite. Vastaanottajan on vahvistettava FormSubmitin ensimmäinen
+aktivointiviesti kerran ennen sähköpostitoimitusten alkamista.
+
+Lähetys näyttää onnistumisen vain palvelun hyväksyttyä viestin. Epäonnistuminen
+säilyttää syötetyt tiedot ja tarjoaa suoran sähköpostilinkin. Piilotettu täyttökenttä
+suodattaa automaattisia roskapostilähetyksiä. Lomakkeen tietojen käsittely kerrotaan
+sivuston tietopainikkeessa; lomakkeella ei pyydetä terveystietoja.
+
+Julkisen lomakkeen logiikka on tiedostossa `tools/contact-form.js`. Studion osoite
+säilyy samana, vaikka julkiselta sivulta poistettiin työversion palkki ja editorilinkki.
+
 ## Julian ja Juhon yhteismuokkaus
 
 Avaa Studio ja valitse **Kirjaudu GitHubilla**. Studio näyttää GitHubin kertakäyttöisen

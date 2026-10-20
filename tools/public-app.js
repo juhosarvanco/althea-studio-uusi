@@ -1,4 +1,5 @@
 import { startGalleries } from "../site/gallery.js";
+import { startContactForm } from './contact-form.js';
 
 (() => {
   startGalleries();
@@ -8,36 +9,15 @@ import { startGalleries } from "../site/gallery.js";
   const policy = $('#policy-dialog');
   for (const button of document.querySelectorAll('[data-policy]')) button.addEventListener('click', () => {
     const privacy = button.dataset.policy === 'privacy';
-    $('#policy-title').textContent = privacy ? 'Tietojen käsittely tässä esikatselussa' : 'Varaus- ja peruutusehdot';
+    $('#policy-title').textContent = privacy ? 'Yhteydenottolomakkeen tietojen käsittely' : 'Varaus- ja peruutusehdot';
     $('#policy-copy').textContent = privacy
-      ? 'Tämä on Althean uusi työversio. Yhteydenottolomake ei lähetä viestejä tai tee varauksia. Viestiluonnoksen voit halutessasi ladata omalle koneellesi. Studion muokkaus edellyttää kirjautumista ja tallentuu erilliseen yhteiseen työversioon. Lopullinen tietosuojaseloste lisätään ennen yhteydenottolomakkeen käyttöönottoa.'
-      : 'Tässä luonnoksessa ei tehdä varauksia tai maksuja. Lopulliset varaus- ja peruutusehdot lisätään ennen ohjelman myyntiä. Ohjelman nykyisessä kuvauksessa maksu jakautuu varausmaksuun ja loppumaksuun, joka maksetaan 14 päivää ennen kokemusta.';
+      ? 'Lomakkeella antamasi nimi, sähköpostiosoite ja viesti välitetään FormSubmit-palvelun kautta osoitteeseen info@althea.fi. Käytämme tietoja yhteydenottoosi vastaamiseen ja tutustumiskeskustelun sopimiseen. FormSubmit säilyttää lomakeviestit palvelussaan 30 päivää. Älä lähetä lomakkeella terveystietoja tai muita arkaluonteisia tietoja. Voit kysyä tietojesi käsittelystä tai pyytää niiden poistamista osoitteesta info@althea.fi.'
+      : 'Yhteydenottopyynnön lähettäminen ei ole varaus eikä edellytä maksua. Ohjelman varaus- ja peruutusehdot käydään läpi erikseen ennen varauksen vahvistamista.';
     policy.showModal();
   });
+  policy.querySelector('[data-close-dialog]').addEventListener('click', () => policy.close());
 
-  const form = $('#contact-form');
-  let message = '';
-  form.addEventListener('submit', event => {
-    event.preventDefault(); if (!form.reportValidity()) return;
-    const data = new FormData(form);
-    message = `Tutustumiskeskustelupyyntö – Althea\n\nNimi: ${String(data.get('name')).trim()}\nSähköposti: ${String(data.get('email')).trim()}\n\n${String(data.get('message') || '').trim()}`;
-    $('#message-preview').textContent = message;
-    $('#contact-result').hidden = false;
-    $('#contact-status').textContent = 'Viestiluonnos on valmis. Viestiä ei ole lähetetty.';
-    const address = $('[data-contact-email]')?.getAttribute('href')?.replace(/^mailto:/, '') || '', emailLink = $('#open-email');
-    emailLink.hidden = !address;
-    if (address) emailLink.href = `mailto:${encodeURIComponent(address)}?subject=${encodeURIComponent('Tutustumiskeskustelupyyntö – Althea')}&body=${encodeURIComponent(message)}`;
-    $('#contact-result').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  });
-  $('#download-message').addEventListener('click', () => {
-    if (!message) return;
-    const url = URL.createObjectURL(new Blob([message], { type: 'text/plain;charset=utf-8' }));
-    const link = document.createElement('a'); link.href = url; link.download = 'althea-viestiluonnos.txt'; link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  });
-  $('#reset-message').addEventListener('click', () => {
-    form.reset(); $('#contact-result').hidden = true; $('#message-preview').textContent = ''; $('#contact-status').textContent = ''; message = ''; $('#contact-name').focus();
-  });
+  startContactForm(document);
 
   const menu = $('.mobile-menu');
   menu.addEventListener('click', event => { if (event.target.closest('a')) menu.open = false; });
@@ -50,6 +30,9 @@ import { startGalleries } from "../site/gallery.js";
     const headerHeight = $('.site-header').getBoundingClientRect().height;
     document.documentElement.style.setProperty('--header-height', headerHeight + 'px');
     const y = window.scrollY;
+    // The fixed photos end at the footer, including during elastic scrolling.
+    const footerTop = $('.site-footer').getBoundingClientRect().top;
+    backdrop.style.clipPath = `inset(0 0 ${Math.max(0, window.innerHeight - footerTop)}px 0)`;
     const coverage = panel => { const rect = panel.getBoundingClientRect(), radius = parseFloat(getComputedStyle(panel).borderTopLeftRadius) || 0; return [y + rect.top + radius - headerHeight, y + rect.bottom - radius - window.innerHeight]; };
     const thresholds = [...document.querySelectorAll('.background-transition-panel')].map(panel => { const [a, b] = coverage(panel); return (a + b) / 2; });
     const wanted = thresholds.reduce((index, threshold, i) => y >= threshold ? i + 1 : index, 0);

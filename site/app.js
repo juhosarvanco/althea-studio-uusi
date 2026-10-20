@@ -84,6 +84,60 @@
     return refresh;
   }
 
+  // tools/contact-form.js
+  async function sendContactRequest(action, data, request = fetch) {
+    const endpoint = new URL(action);
+    if (endpoint.origin !== "https://formsubmit.co") throw new Error("Invalid contact endpoint");
+    endpoint.pathname = `/ajax${endpoint.pathname}`;
+    const response = await request(endpoint.href, {
+      method: "POST",
+      headers: { Accept: "application/json" },
+      body: data,
+      credentials: "omit",
+      signal: AbortSignal.timeout(2e4)
+    });
+    const result = await response.json();
+    if (!response.ok || ![true, "true"].includes(result.success)) throw new Error("Message was not accepted");
+  }
+  function startContactForm(document2, request = fetch) {
+    const form = document2.querySelector("#contact-form");
+    if (!form) return;
+    const status = document2.querySelector("#contact-status");
+    const submit = form.querySelector('[type="submit"]');
+    const label = submit.textContent;
+    let sending = false;
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (sending || !form.reportValidity()) return;
+      const data = new FormData(form);
+      const controls = [...form.querySelectorAll("input, textarea, button")].map((control) => [control, control.disabled]);
+      sending = true;
+      controls.forEach(([control]) => {
+        control.disabled = true;
+      });
+      form.setAttribute("aria-busy", "true");
+      submit.textContent = "L\xE4hetet\xE4\xE4n\u2026";
+      status.dataset.state = "pending";
+      status.textContent = "L\xE4hetet\xE4\xE4n yhteydenottopyynt\xF6\xE4\u2026";
+      try {
+        await sendContactRequest(form.action, data, request);
+        form.reset();
+        status.dataset.state = "success";
+        status.textContent = "Kiitos! Yhteydenottopyynt\xF6si on l\xE4hetetty. Vastaamme kahden arkip\xE4iv\xE4n kuluessa.";
+      } catch {
+        status.dataset.state = "error";
+        status.textContent = "L\xE4hetys ei onnistunut. Tietosi ovat tallella lomakkeessa. Yrit\xE4 uudelleen tai l\xE4het\xE4 viesti osoitteeseen info@althea.fi.";
+      } finally {
+        sending = false;
+        controls.forEach(([control, disabled]) => {
+          control.disabled = disabled;
+        });
+        form.removeAttribute("aria-busy");
+        submit.textContent = label;
+      }
+    });
+  }
+
   // tools/public-app.js
   (() => {
     startGalleries();
@@ -92,47 +146,12 @@
     const policy = $("#policy-dialog");
     for (const button of document.querySelectorAll("[data-policy]")) button.addEventListener("click", () => {
       const privacy = button.dataset.policy === "privacy";
-      $("#policy-title").textContent = privacy ? "Tietojen k\xE4sittely t\xE4ss\xE4 esikatselussa" : "Varaus- ja peruutusehdot";
-      $("#policy-copy").textContent = privacy ? "T\xE4m\xE4 on Althean uusi ty\xF6versio. Yhteydenottolomake ei l\xE4het\xE4 viestej\xE4 tai tee varauksia. Viestiluonnoksen voit halutessasi ladata omalle koneellesi. Studion muokkaus edellytt\xE4\xE4 kirjautumista ja tallentuu erilliseen yhteiseen ty\xF6versioon. Lopullinen tietosuojaseloste lis\xE4t\xE4\xE4n ennen yhteydenottolomakkeen k\xE4ytt\xF6\xF6nottoa." : "T\xE4ss\xE4 luonnoksessa ei tehd\xE4 varauksia tai maksuja. Lopulliset varaus- ja peruutusehdot lis\xE4t\xE4\xE4n ennen ohjelman myynti\xE4. Ohjelman nykyisess\xE4 kuvauksessa maksu jakautuu varausmaksuun ja loppumaksuun, joka maksetaan 14 p\xE4iv\xE4\xE4 ennen kokemusta.";
+      $("#policy-title").textContent = privacy ? "Yhteydenottolomakkeen tietojen k\xE4sittely" : "Varaus- ja peruutusehdot";
+      $("#policy-copy").textContent = privacy ? "Lomakkeella antamasi nimi, s\xE4hk\xF6postiosoite ja viesti v\xE4litet\xE4\xE4n FormSubmit-palvelun kautta osoitteeseen info@althea.fi. K\xE4yt\xE4mme tietoja yhteydenottoosi vastaamiseen ja tutustumiskeskustelun sopimiseen. FormSubmit s\xE4ilytt\xE4\xE4 lomakeviestit palvelussaan 30 p\xE4iv\xE4\xE4. \xC4l\xE4 l\xE4het\xE4 lomakkeella terveystietoja tai muita arkaluonteisia tietoja. Voit kysy\xE4 tietojesi k\xE4sittelyst\xE4 tai pyyt\xE4\xE4 niiden poistamista osoitteesta info@althea.fi." : "Yhteydenottopyynn\xF6n l\xE4hett\xE4minen ei ole varaus eik\xE4 edellyt\xE4 maksua. Ohjelman varaus- ja peruutusehdot k\xE4yd\xE4\xE4n l\xE4pi erikseen ennen varauksen vahvistamista.";
       policy.showModal();
     });
-    const form = $("#contact-form");
-    let message = "";
-    form.addEventListener("submit", (event) => {
-      event.preventDefault();
-      if (!form.reportValidity()) return;
-      const data = new FormData(form);
-      message = `Tutustumiskeskustelupyynt\xF6 \u2013 Althea
-
-Nimi: ${String(data.get("name")).trim()}
-S\xE4hk\xF6posti: ${String(data.get("email")).trim()}
-
-${String(data.get("message") || "").trim()}`;
-      $("#message-preview").textContent = message;
-      $("#contact-result").hidden = false;
-      $("#contact-status").textContent = "Viestiluonnos on valmis. Viesti\xE4 ei ole l\xE4hetetty.";
-      const address = $("[data-contact-email]")?.getAttribute("href")?.replace(/^mailto:/, "") || "", emailLink = $("#open-email");
-      emailLink.hidden = !address;
-      if (address) emailLink.href = `mailto:${encodeURIComponent(address)}?subject=${encodeURIComponent("Tutustumiskeskustelupyynt\xF6 \u2013 Althea")}&body=${encodeURIComponent(message)}`;
-      $("#contact-result").scrollIntoView({ block: "nearest", behavior: "smooth" });
-    });
-    $("#download-message").addEventListener("click", () => {
-      if (!message) return;
-      const url = URL.createObjectURL(new Blob([message], { type: "text/plain;charset=utf-8" }));
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = "althea-viestiluonnos.txt";
-      link.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1e3);
-    });
-    $("#reset-message").addEventListener("click", () => {
-      form.reset();
-      $("#contact-result").hidden = true;
-      $("#message-preview").textContent = "";
-      $("#contact-status").textContent = "";
-      message = "";
-      $("#contact-name").focus();
-    });
+    policy.querySelector("[data-close-dialog]").addEventListener("click", () => policy.close());
+    startContactForm(document);
     const menu = $(".mobile-menu");
     menu.addEventListener("click", (event) => {
       if (event.target.closest("a")) menu.open = false;
@@ -149,6 +168,8 @@ ${String(data.get("message") || "").trim()}`;
       const headerHeight = $(".site-header").getBoundingClientRect().height;
       document.documentElement.style.setProperty("--header-height", headerHeight + "px");
       const y = window.scrollY;
+      const footerTop = $(".site-footer").getBoundingClientRect().top;
+      backdrop.style.clipPath = `inset(0 0 ${Math.max(0, window.innerHeight - footerTop)}px 0)`;
       const coverage = (panel) => {
         const rect = panel.getBoundingClientRect(), radius = parseFloat(getComputedStyle(panel).borderTopLeftRadius) || 0;
         return [y + rect.top + radius - headerHeight, y + rect.bottom - radius - window.innerHeight];
