@@ -27,22 +27,28 @@ for (const path of ['/api/studio-session', '/api/en/layout']) {
 }
 console.log('PASS: browser login and both languages reachable; anonymous access denied');
 
-for (const room of ['althea-uusi', 'althea-uusi-en']) {
+try { for (const room of ['althea-uusi', 'althea-uusi-en']) {
   await new Promise((resolve, reject) => {
-    const req = request(`${server}/sync/${room}`, { headers: {
+    const req = request(`${server}/sync/${room}`, { agent: false, headers: {
       Origin: origin, Connection: 'Upgrade', Upgrade: 'websocket',
       'Sec-WebSocket-Version': '13', 'Sec-WebSocket-Key': randomBytes(16).toString('base64')
     } }, res => {
       // An unauthenticated handshake must reach Studio and be refused by it.
       res.resume();
-      if (res.statusCode === 401) resolve(); else reject(new Error(`WebSocket-yhteys palautti ${res.statusCode}.`));
+      res.once('end', () => {
+        if (res.statusCode === 401) resolve(); else reject(new Error(`WebSocket-yhteys palautti ${res.statusCode}.`));
+      });
     });
-    req.once('upgrade', (_, socket) => { socket.destroy(); reject(new Error('Kirjautumaton WebSocket hyväksyttiin.')); });
+    req.once('upgrade', (_, socket) => { socket.destroy(); const error = new Error('Kirjautumaton WebSocket hyväksyttiin.'); error.security = true; reject(error); });
     req.setTimeout(15000, () => req.destroy(new Error('WebSocket-yhteys ei vastaa.')));
     req.once('error', reject); req.end();
   });
 }
 console.log('PASS: Finnish and English WebSocket endpoints reachable from this network');
+} catch (error) {
+  if (!configuration.relay || error.security) throw error;
+  console.log('Direct WebSocket probe unavailable; checking the backup HTTPS route instead.');
+}
 
 if (configuration.relay) {
   const relay = studioAddress(configuration.relay);
