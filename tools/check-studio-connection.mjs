@@ -9,7 +9,8 @@ const check = (condition, message) => { if (!condition) throw new Error(message)
 const get = (url, options = {}) => fetch(url, { cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(15000), ...options });
 const response = await get(origin + '/studio/config.json');
 check(response.ok, 'Studion yhteysasetukset eivät vastaa.');
-const server = studioAddress((await response.json()).server);
+const configuration = await response.json();
+const server = studioAddress(configuration.server);
 const health = await get(server + '/health', { headers: { Origin: origin } });
 check(health.ok && (await health.json()).ok === true, 'Tallennuspalvelin ei vastaa internetistä.');
 check(health.headers.get('access-control-allow-origin') === origin, 'Studion selainyhteys on estetty.');
@@ -42,3 +43,15 @@ for (const room of ['althea-uusi', 'althea-uusi-en']) {
   });
 }
 console.log('PASS: Finnish and English WebSocket endpoints reachable from this network');
+
+if (configuration.relay) {
+  const relay = studioAddress(configuration.relay);
+  const response = await get(relay + '/health', { headers: { Origin: origin } });
+  check(response.ok && (await response.json()).ok === true
+    && response.headers.get('access-control-allow-origin') === origin, 'HTTPS-varayhteys ei vastaa.');
+  for (const path of ['/api/poll-open', '/api/en/poll-open']) {
+    const denied = await get(relay + path, { method: 'POST', headers: { Origin: origin, 'content-type': 'application/json' }, body: '{}' });
+    check(denied.status === 401 && (await denied.json()).error, 'Varayhteyden kirjautumissuojaus ei vastaa oikein.');
+  }
+  console.log('PASS: backup HTTPS transport reachable for both languages; anonymous access denied');
+}

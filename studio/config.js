@@ -30,6 +30,7 @@ export async function studioConfiguration({ refresh = false } = {}) {
     const data = await response.json();
     const local = ['localhost', '127.0.0.1'].includes(location.hostname);
     configuration = { server: studioAddress(local ? location.origin : data.server, { local }) };
+    if (!local && data.relay) configuration.relay = studioAddress(data.relay);
   }
   return configuration;
 }

@@ -8,6 +8,7 @@ import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { studioReachable, waitForStudio } from './studio-health.mjs';
 import { quickTunnelAddress, tunnelFailureMessage } from './studio-tunnel.mjs';
+import { ensureRelay } from './studio-relay.mjs';
 const run = promisify(execFile);
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..'), directory = join(root, '.studio-live');
 const statePath = join(directory, 'host.json'), envPath = join(root, '.env.studio');
@@ -50,8 +51,10 @@ async function startServer(local) {
 }
 async function build(address) { await run(process.execPath, [join(root, 'tools/build-studio.mjs')], { cwd: root, env: { ...process.env, STUDIO_SERVER_URL: address }, maxBuffer: 2 * 1024 * 1024 }); }
 async function publishConnection(host) {
+  const relay = await ensureRelay(host.address);
   await build(host.address);
   await run('gh', ['variable', 'set', 'STUDIO_SERVER_URL', '--repo', repository, '--body', host.address]);
+  if (relay) await run('gh', ['variable', 'set', 'STUDIO_RELAY_URL', '--repo', repository, '--body', relay.url]);
   if (!process.argv.includes('--no-deploy')) await run('gh', ['workflow', 'run', 'pages.yml', '--repo', repository]);
 }
 const command = process.argv[2] || 'status';

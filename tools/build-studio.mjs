@@ -9,6 +9,12 @@ import { studioAddress } from '../shared/studio-address.mjs';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 // A release must never accidentally point visitors at localhost or a LAN IP.
 if (process.env.GITHUB_ACTIONS) studioAddress(process.env.STUDIO_SERVER_URL);
+let relay = process.env.STUDIO_RELAY_URL;
+if (!relay && !process.env.GITHUB_ACTIONS) {
+  try { relay = JSON.parse(await readFile(join(root, '.studio-live/relay.json'), 'utf8')).url; }
+  catch (error) { if (error.code !== 'ENOENT') throw error; }
+}
+if (relay) relay = studioAddress(relay);
 // Bundle the shared gallery controls into the public page's deferred script.
 // A separate async import allowed the first arrow click to arrive too early.
 await build({ entryPoints: [join(root, 'tools/public-app.js')], bundle: true, format: 'iife',
@@ -53,6 +59,6 @@ for (const language of ['fi', 'en']) {
   console.log(`Studio built (${language}): ${manifest.fields.length} shared text fields.`);
 }
 await writeFile(join(root, 'site/studio/studio.css'), await readFile(join(root, 'studio/studio.css')));
-await writeFile(join(root, 'site/studio/config.json'), JSON.stringify({ server: process.env.STUDIO_SERVER_URL || 'http://127.0.0.1:8796' }) + '\n');
+await writeFile(join(root, 'site/studio/config.json'), JSON.stringify({ server: process.env.STUDIO_SERVER_URL || 'http://127.0.0.1:8796', ...(relay ? { relay } : {}) }) + '\n');
 await build({ entryPoints: [join(root, 'studio/client.js')], bundle: true, format: 'esm', minify: true,
   outfile: join(root, 'site/studio/client.js'), target: ['es2022'] });

@@ -13,6 +13,7 @@ import { issueStudioToken, verifyStudioToken } from '../shared/studio-token.mjs'
 import { MediaLibrary, MAX_IMAGE_BYTES, mediaView, changeImage, removeImage } from './media.mjs';
 import { GithubLogin } from './auth.mjs';
 import { GithubPublisher } from './publish.mjs';
+import { PollConnections } from './polling.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.json': 'application/json',
@@ -62,6 +63,7 @@ export async function createStudioServer(options = {}) {
   const login = options.login || new GithubLogin({ clientId: process.env.GITHUB_CLIENT_ID || '', allowed,
     ...(!development ? { directory: store.directory, secret } : {}) });
   const acceptedOrigins = new Set(origins);
+  const polling = new PollConnections();
   const authenticate = req => {
     const user = verifyStudioToken((req.headers.authorization || '').replace(/^Bearer /, ''), secret, development ? ['juho', 'julia'] : allowed);
     if (!development) login.check(user);
@@ -135,6 +137,10 @@ export async function createStudioServer(options = {}) {
             return response(req, res, 403, { error: 'Local operator only' });
           user = { sub: 'althea-layout', name: 'Ulkoasupäivitys' };
         } else user = authenticate(req);
+        if (req.method === 'POST' && ['/api/poll-open', '/api/poll-read', '/api/poll-send', '/api/poll-close'].includes(path)) {
+          if (!acceptedOrigins.has(req.headers.origin)) return response(req, res, 403, { error: 'Origin not allowed' });
+          return response(req, res, 200, await polling.handle(path, await readBody(req, 1024 * 1024), user, context, connectSocket));
+        }
         if (req.method === 'POST' && path === '/api/studio-publish') {
           if (development) return response(req, res, 403, { error: 'Local testing cannot publish.' });
           if (!acceptedOrigins.has(req.headers.origin)) return response(req, res, 403, { error: 'Origin not allowed' });
@@ -214,7 +220,7 @@ export async function createStudioServer(options = {}) {
       sockets.handleUpgrade(req, socket, head, ws => sockets.emit('connection', ws, user, context));
     } catch { socket.end('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n'); }
   });
-  sockets.on('connection', (socket, user, context) => {
+  function connectSocket(socket, user, context) {
     const { store, online, connections, layoutSubscribers, mediaSubscribers, ack, layoutNotice } = context;
     const ids = new Set(); connections.set(socket, ids);
     socket.studioUser = user; socket.alive = true;
@@ -266,7 +272,8 @@ export async function createStudioServer(options = {}) {
     });
     const e = encoding.createEncoder(); encoding.writeVarUint(e, 0); sync.writeSyncStep1(e, store.doc); socket.send(encoding.toUint8Array(e));
     socket.send(packet(1, awareness.encodeAwarenessUpdate(online, [...online.getStates().keys()])));
-  });
+  }
+  sockets.on('connection', connectSocket);
   const timer = setInterval(() => { for (const { connections, store } of contexts.values()) if (connections.size) store.checkpoint('Automaattinen versio', 'Althea'); }, 15 * 60 * 1000); timer.unref();
   const heartbeat = setInterval(() => {
     for (const { connections } of contexts.values()) for (const socket of connections.keys()) {
@@ -278,7 +285,7 @@ export async function createStudioServer(options = {}) {
   const port = http.address().port;
   if (development) { acceptedOrigins.add(`http://127.0.0.1:${port}`); acceptedOrigins.add(`http://localhost:${port}`); }
   return { http, store, media, contexts, port, secret, close: async () => {
-    clearInterval(timer); clearInterval(heartbeat); for (const { connections } of contexts.values()) for (const socket of connections.keys()) socket.terminate();
+    clearInterval(timer); clearInterval(heartbeat); polling.close(); for (const { connections } of contexts.values()) for (const socket of connections.keys()) socket.terminate();
     await new Promise(resolve => sockets.close(resolve)); await new Promise(resolve => http.close(resolve));
     for (const { online, store } of contexts.values()) { online.destroy(); store.close(); }
   } };

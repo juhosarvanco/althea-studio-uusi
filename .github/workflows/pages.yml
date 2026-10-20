@@ -24,6 +24,7 @@ jobs:
         run: npm run build
         env:
           STUDIO_SERVER_URL: ${{ vars.STUDIO_SERVER_URL }}
+          STUDIO_RELAY_URL: ${{ vars.STUDIO_RELAY_URL }}
       - run: touch site/.nojekyll
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

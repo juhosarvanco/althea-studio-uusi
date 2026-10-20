@@ -81,6 +81,14 @@ Sovelluksen omat annotate-kommentit kuuluvat siihen keskusteluun, jossa ne annet
 GitHub Pages näyttää sivuston ja Studion käyttöliittymän. Reaaliaikainen tallennuspalvelin
 toimii aluksi Juhon Macilla omassa prosessissaan, portissa `8796`.
 HTTPS-yhteyden välittää erillinen Cloudflare-tunneli.
+Jos selaimen verkko ei tavoita tunnelin osoitetta tai salli WebSocket-yhteyttä,
+Studio kokeilee automaattisesti HTTPS-varayhteyttä osoitteessa
+`https://althea-studio-connect.netlify.app`. Se välittää tavallisia HTTPS-pyyntöjä
+samalle palvelimelle. Molemmat yhteystavat käyttävät samoja käyttäjäoikeuksia,
+työversioita, kommentteja, historiaa ja tallennuksen vahvistuksia.
+Varayhteyden tiedot ovat `.studio-live/relay.json`-tiedostossa. Käynnistin päivittää
+sen automaattisesti tunnelin osoitteen vaihtuessa. Netlify-yhteys käyttää Macille
+jo tallennettua CLI-kirjautumista. Kumpaankaan vanhaan Netlify-sivustoon ei kosketa.
 
 Uuden Studion työversio, kommentit, kuvat ja historia ovat tämän projektin
 `.studio-live/data/`-kansiossa; englannin tiedot ovat sen `en/`-alikansiossa.

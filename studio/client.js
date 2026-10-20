@@ -13,6 +13,8 @@ import { createMediaMode } from './media-client.js';
 import { studioConfiguration, connectionMessage, studioLanguage, studioRoom, contentPath, sitePath } from './config.js';
 import { sessionCache, needsLogin } from './session-cache.mjs';
 import { participants } from './presence.mjs';
+import { HttpSocket } from './http-socket.js';
+import { connectionRequest } from './connection.js';
 
 const $ = selector => document.querySelector(selector);
 const language = studioLanguage();
@@ -380,15 +382,15 @@ function registerTools() {
 async function loadSession(refreshConfiguration) {
   const local = ['localhost', '127.0.0.1'].includes(location.hostname);
   const requested = new URL(location.href).searchParams.get('name') === 'julia' ? 'julia' : 'juho';
-  const configuration = await studioConfiguration({ refresh: refreshConfiguration });
+  const configuration = { ...await studioConfiguration({ refresh: refreshConfiguration }),
+    preferRelay: session?.transport === 'https' || new URL(location.href).searchParams.get('connection') === 'https' };
+  if (local && new URL(location.href).searchParams.get('connection') === 'https') configuration.transport = 'https';
   const token = credentials.credential(session);
-  const response = await fetch(`${configuration.server}/api/studio-session${local ? `?name=${requested}` : ''}`, {
-    cache: 'no-store', headers: token ? { authorization: `Bearer ${token}` } : {}, signal: AbortSignal.timeout(15000) });
-  let result;
-  try { result = await response.json(); } catch { throw new TypeError('Tallennuspalvelimen yhteys ei vastaa.'); }
+  const { response, result, server, transport, relay } = await connectionRequest(configuration, `/api/studio-session${local ? `?name=${requested}` : ''}`, {
+    cache: 'no-store', headers: token ? { authorization: `Bearer ${token}` } : {} });
   if (!response.ok) { const error = new Error(result.error || result.message || 'Kirjautuminen epäonnistui.'); error.status = response.status; throw error; }
   credentials.save(result);
-  return { ...result, server: configuration.server };
+  return { ...result, server, transport, relay };
 }
 async function getSession(refreshConfiguration = false) {
   if (!sessionRequest) sessionRequest = loadSession(refreshConfiguration).finally(() => sessionRequest = null);
@@ -454,11 +456,12 @@ $('#studio-login').onclick = async () => {
   const sequence = ++loginSequence, button = $('#studio-login');
   button.disabled = true; loginActive = true;
   try {
-    const configuration = await studioConfiguration();
+    const configuration = { ...await studioConfiguration() };
+    let connection;
     const request = async (path, body) => {
-      const response = await fetch(configuration.server + path, { method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body), signal: AbortSignal.timeout(20000) });
-      const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Kirjautuminen epäonnistui.'); return data;
+      connection = await connectionRequest(configuration, path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+      configuration.preferRelay = connection.transport === 'https';
+      if (!connection.response.ok) throw new Error(connection.result.error || 'Kirjautuminen epäonnistui.'); return connection.result;
     };
     const attempt = await request('/api/login-start', {});
     $('#studio-login-code').textContent = attempt.code;
@@ -473,7 +476,7 @@ $('#studio-login').onclick = async () => {
       if (sequence !== loginSequence) break;
       const result = await request('/api/login-poll', { id: attempt.id });
       if (result.pending) { interval = result.interval; continue; }
-      session = { ...result, server: configuration.server };
+      session = { ...result, server: connection.server, relay: connection.relay, transport: connection.transport };
       credentials.save(result); awaitingLogin = false;
       $('#studio-login-step').hidden = true;
       await start(); return;
@@ -488,7 +491,11 @@ async function initialize() {
     session = await getSession(true); awaitingLogin = false;
     $('#studio-gate').close();
     if (provider) { connectSession(); await refreshLayout(); await mediaMode.refresh(); return; }
-    const Socket = class extends WebSocket { constructor(url) { super(url, [`althea-auth.${session.token}`]); } };
+    const Socket = class { constructor(url) {
+      return session.transport === 'https'
+        ? new HttpSocket({ server: session.server, path: contentPath('/api/'), token: () => session?.token || '' })
+        : new WebSocket(url, [`althea-auth.${session.token}`]);
+    } };
     provider = new WebsocketProvider(session.server.replace(/^http/, 'ws') + '/sync', studioRoom(), doc,
       { WebSocketPolyfill: Socket, disableBc: true });
     provider.messageHandlers[4] = (_, decoder) => { persisted = new TextDecoder().decode(decoding.readVarUint8Array(decoder)); status(); };
@@ -499,6 +506,13 @@ async function initialize() {
       if (connected) { for (const type of [5, 6]) { const request = encoding.createEncoder(); encoding.writeVarUint(request, type); provider.ws.send(encoding.toUint8Array(request)); } mediaMode.refresh().catch(error => toast(error.message)); }
       status();
       if (!connected) recoverSession();
+    });
+    provider.on('connection-error', event => {
+      if (session?.transport === 'https') { if (event.error) toast(connectionMessage(event.error)); return; }
+      if (!session?.relay) return;
+      session = { ...session, server: session.relay, transport: 'https' };
+      provider.disconnect(); connectSession();
+      refreshLayout(); mediaMode.refresh().catch(error => toast(error.message));
     });
     provider.on('sync', synced => { if (synced) { applyPendingLayout(); status(); } });
     connectSession();
