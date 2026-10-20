@@ -14,6 +14,7 @@ import { MediaLibrary, MAX_IMAGE_BYTES, mediaView, changeImage, removeImage } fr
 import { GithubLogin } from './auth.mjs';
 import { GithubPublisher } from './publish.mjs';
 import { PollConnections } from './polling.mjs';
+import { enableHeaderEditing } from './navigation.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.json': 'application/json',
@@ -41,6 +42,7 @@ export async function createStudioServer(options = {}) {
         manifest, await readFile(join(root, editor, 'template.html'), 'utf8'));
       const context = { language, store, connections: new Map(), layoutSubscribers: new Set(), mediaSubscribers: new Set() };
       contexts.set(language, context);
+      enableHeaderEditing(store);
       context.media = new MediaLibrary(store.directory, join(root, 'site'), store.template);
       context.publisher = options.publishers?.[language] || (language === 'fi' && options.publisher)
         || new GithubPublisher({ store, media: context.media, site: join(root, 'site'), language });

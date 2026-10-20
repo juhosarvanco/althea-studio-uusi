@@ -5,7 +5,9 @@ import { createHash, randomUUID } from 'node:crypto';
 export function prepareTargets(document, { newIds = false } = {}) {
   const targets = [], used = new Set();
   for (const el of document.querySelectorAll('header, main, footer, header *, main *, footer *')) {
-    if (el.hasAttribute('data-studio-field') || el.parentElement?.closest('[data-studio-field]')
+    // Newly editable navigation can already have comments anchored to its
+    // object ID. Keep that ID alongside the new text field and its history.
+    if (el.hasAttribute('data-studio-field') && !el.hasAttribute('data-studio-node') || el.parentElement?.closest('[data-studio-field]')
       || el.closest('svg, [data-studio-chrome]')
       || !el.matches('header, main, footer, section, article, div, figure, img, nav, a, button, details, summary, form, input, textarea, label, select, ul, ol, li')) continue;
     const path = []; let parent = el;

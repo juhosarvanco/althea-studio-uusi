@@ -120,7 +120,7 @@ export function startPageBehavior() {
   window.addEventListener('scroll', schedule, { passive: true }); window.addEventListener('resize', schedule);
   window.addEventListener('hashchange', () => measure(true));
   document.fonts?.ready.then(schedule);
-  document.addEventListener('click', event => { const menu = event.target.closest('.mobile-menu'); if (menu && event.target.closest('a')) menu.open = false; });
+  document.addEventListener('click', event => { const menu = event.target.closest('.mobile-menu'); if (menu && event.target.closest('a') && !event.defaultPrevented) menu.open = false; });
   document.addEventListener('keydown', event => {
     const menu = event.target.closest('.mobile-menu'); if (menu && event.key === 'Escape') { menu.open = false; menu.querySelector('summary')?.focus(); }
   });

@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { prepareTargets } from './targets.mjs';
 
 const INLINE = new Set(['A', 'SPAN', 'STRONG', 'EM', 'B', 'I', 'BR', 'SMALL', 'SUP', 'SUB']);
+export const HEADER_FIELDS = 'header a, header span';
 export function prepareTemplate(source, { newFieldIds = false } = {}) {
   const { document } = parseHTML(source);
   const manifest = { version: 1, fields: [], sourceHash: createHash('sha256').update(source).digest('hex') }, counts = new Map();
@@ -20,13 +21,14 @@ export function prepareTemplate(source, { newFieldIds = false } = {}) {
     for (const child of element.childNodes) walk(child);
     return { type: 'doc', content: [{ type: 'paragraph', content: nodes }] };
   }
-  for (const el of document.querySelectorAll('main h1, main h2, main h3, main h4, main p, main li, main span, main .pair-reasons strong, main a, footer p, footer span, footer a, footer div')) {
+  for (const el of document.querySelectorAll(`${HEADER_FIELDS}, main h1, main h2, main h3, main h4, main p, main li, main span, main .pair-reasons strong, main a, footer p, footer span, footer a, footer div`)) {
     if (el.closest('[aria-hidden="true"], [data-studio-ignore], [data-studio-chrome]') || el.matches('.pair-reasons li')
       || el.parentElement?.closest('[data-studio-field]')) continue;
     if (el.matches('span, a, strong, footer div') && el.children.length) continue;
     if (!el.hasAttribute('data-studio-field') && !el.textContent.trim()) continue;
     if ([...el.children].some(child => !INLINE.has(child.tagName))) continue;
-    const section = el.closest('section[id]'), sectionId = section?.id || 'alatunniste';
+    const section = el.closest('section[id]'), header = el.closest('header');
+    const sectionId = section?.id || (header ? 'valikko' : 'alatunniste');
     const key = `${sectionId}-${el.tagName.toLowerCase()}`; counts.set(key, (counts.get(key) || 0) + 1);
     const id = el.getAttribute('data-studio-field') || (newFieldIds ? `field-${randomUUID()}` : `${key}-${counts.get(key)}`);
     if (!/^[a-zA-Z][a-zA-Z0-9_-]{0,99}$/.test(id) || ['meta', 'comments'].includes(id)
@@ -34,7 +36,7 @@ export function prepareTemplate(source, { newFieldIds = false } = {}) {
     el.setAttribute('data-studio-field', id); el.setAttribute('oai-annotation-container', '');
     el.setAttribute('oai-annotatable', id);
     el.setAttribute('oai-annotation-metadata', JSON.stringify({ fieldId: id, document: 'althea' }));
-    manifest.fields.push({ id, section: section?.getAttribute('data-screen-label') || 'Alatunniste',
+    manifest.fields.push({ id, section: section?.getAttribute('data-screen-label') || (header ? 'Valikko' : 'Alatunniste'),
       tag: el.tagName.toLowerCase(), content: toJSON(el) });
   }
   if (document.querySelectorAll('[data-studio-field]').length !== manifest.fields.length)
