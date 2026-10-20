@@ -1,6 +1,7 @@
 // Reuse the actual editor elements rather than rendering saved text over them.
 // Their Yjs bindings, selections and undo managers survive a layout move.
 import { sitePath } from './config.js';
+import { rewriteAssets } from '../shared/site-assets.mjs';
 import { startGalleries } from '../site/gallery.js';
 
 export function reconcileLayout(layout, editors, prepareImages = () => {}) {
@@ -18,7 +19,7 @@ export function reconcileLayout(layout, editors, prepareImages = () => {}) {
   for (const el of incoming.querySelectorAll('[src], [href], [srcset]')) {
     for (const name of ['src', 'href', 'srcset']) {
       const value = el.getAttribute(name);
-      if (value?.startsWith('assets/')) el.setAttribute(name, value.replace(/(^|,\s*)assets\//g, `$1${sitePath('assets/')}`));
+      if (value) el.setAttribute(name, rewriteAssets(value, sitePath()));
       if (name === 'href' && value === 'original.html') el.setAttribute(name, sitePath(value));
       if (name === 'href' && value === 'studio/') el.setAttribute(name, sitePath(value));
     }
@@ -57,7 +58,7 @@ export function reconcileLayout(layout, editors, prepareImages = () => {}) {
   }
   const styles = [...incoming.head.querySelectorAll('style')].map(el => {
     el.dataset.studioSiteStyle = '';
-    el.textContent = el.textContent.replace(/url\((['"]?)assets\//g, `url($1${sitePath('assets/')}`); return el;
+    el.textContent = rewriteAssets(el.textContent, sitePath()); return el;
   });
   document.querySelectorAll('head style[data-studio-site-style]').forEach(el => el.remove());
   const studioCSS = document.querySelector('link[href$="/studio/studio.css"]');

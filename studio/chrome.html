@@ -1,5 +1,10 @@
 <div class="studio-bar" data-studio-chrome>
   <a class="studio-brand" href="#alku">ALTHEA <span>Uuden version Studio</span></a>
+  <label class="studio-language" lang="fi">Muokattava kieli
+    <select id="studio-language" aria-label="Muokattava kieli">
+      <option value="fi">Suomi</option><option value="en">English</option>
+    </select>
+  </label>
   <span id="studio-status" role="status" aria-live="polite">Yhdistetään…</span>
   <div id="studio-people" aria-label="Osallistujat"></div>
   <div class="studio-actions">
@@ -26,6 +31,7 @@
   <p id="studio-gate-message">Kirjaudu omalla GitHub-tunnuksellasi. Muutokset tallentuvat yhteiseen työversioon.</p>
   <button id="studio-login" class="studio-primary" type="button">Kirjaudu GitHubilla</button>
   <button id="studio-reconnect" class="studio-primary" type="button" hidden>Yritä yhteyttä uudelleen</button>
+  <button id="studio-login-reset" type="button" hidden>Kirjaudu GitHubilla uudelleen</button>
   <div id="studio-login-step" hidden>
     <p>GitHubin kertakäyttöinen vahvistuskoodi</p>
     <p id="studio-login-code" class="studio-device-code"></p>

@@ -2,11 +2,12 @@ import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync, openSyn
 import { join, basename } from 'node:path';
 import { createHash } from 'node:crypto';
 import { parseHTML } from 'linkedom';
+import { assetPath } from '../shared/site-assets.mjs';
 
 export const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const digest = value => createHash('sha256').update(value).digest('hex');
 const fail = (message, status = 400) => { const error = new Error(message); error.status = status; throw error; };
-const cleanPath = value => String(value || '').replace(/^\//, '');
+const cleanPath = value => assetPath(value) || String(value || '');
 function atomic(path, bytes) {
   const fd = openSync(path + '.tmp', 'w', 0o600);
   try { writeFileSync(fd, bytes); fsyncSync(fd); } finally { closeSync(fd); }
@@ -54,6 +55,7 @@ export class MediaLibrary {
     this.indexPath = join(this.directory, 'library.json');
     this.entries = existsSync(this.indexPath) ? JSON.parse(readFileSync(this.indexPath, 'utf8')) : [];
     const { document } = parseHTML(template);
+    this.assetPrefix = document.documentElement.getAttribute('lang') === 'en' ? '../' : '';
     for (const image of document.querySelectorAll('img[src]')) {
       const path = cleanPath(image.getAttribute('src'));
       if (!/^assets\/img\/[a-zA-Z0-9._-]+\.webp$/.test(path) || !existsSync(join(site, path))) continue;
@@ -169,7 +171,7 @@ export function changeImage(store, library, body, actor) {
     || body.position.split(' ').some(value => parseInt(value) > 100)) fail('Tarkista kuvan kuvaus ja rajaus.');
   const entry = library.get(body.mediaId), { document } = parseHTML(store.template);
   const image = document.querySelector(`[data-studio-node="${slot.id}"]`);
-  image.setAttribute('src', entry.path); image.removeAttribute('srcset'); image.setAttribute('alt', body.alt);
+  image.setAttribute('src', library.assetPrefix + entry.path); image.removeAttribute('srcset'); image.setAttribute('alt', body.alt);
   if (image.hasAttribute('data-portrait')) {
     image.removeAttribute('hidden');
     image.parentElement.querySelector('[data-portrait-placeholder]')?.setAttribute('hidden', '');

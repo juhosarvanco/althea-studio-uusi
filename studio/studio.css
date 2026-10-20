@@ -6,6 +6,8 @@ html { scroll-padding-top: 190px; }
 .studio-bar { position: fixed; inset: 0 0 auto; min-height: 72px; z-index: 1000; display: flex; gap: 20px; align-items: center; padding: 12px 24px; background: #e8eee9; border-bottom: 1px solid #c1cdc3; box-shadow: 0 3px 16px #0d1f2908; }
 .studio-brand { font: 17px Georgia,serif; letter-spacing: .15em; text-decoration: none; color: #0d1f29; white-space: nowrap; }
 .studio-brand span { display:block; font: 11px/1.4 'Karla',sans-serif; letter-spacing: .02em; color: #48645a; margin-top: 4px; }
+.studio-language { font-size:11px; color:#48645a; white-space:nowrap; }
+.studio-language select { display:block; font:14px/1.4 'Karla',sans-serif; padding:5px 24px 5px 9px; border:1px solid #b8c5ba; border-radius:8px; background:#faf8f4; color:#0d1f29; }
 #studio-status { font-size: 12px; max-width: 170px; }
 #studio-status::before { content: ''; display:inline-block; width:7px; height:7px; border-radius:50%; background:#48645a; margin-right:7px; }
 #studio-status[data-state="pending"]::before { background:#ba8439; }
@@ -113,7 +115,7 @@ dialog[data-studio-chrome] h2 { font:30px/1.25 Georgia,serif; margin-bottom:20px
 #studio-archive-dock button { margin-top:16px; padding:8px 14px; border:1px solid #a9b5ab; border-radius:12px; background:#fff; cursor:pointer; }
 #studio-archive-dock [data-archive-editor] { max-height:32vh; overflow:auto; }
 @media(max-width:1050px) { .studio-bar { gap:12px; padding:10px 16px; } #studio-people{display:none;} #studio-status{max-width:130px;} }
-@media(max-width:1450px) { .studio-bar{min-height:112px; flex-wrap:wrap; gap:8px 20px;} .studio-actions{width:100%;margin-left:0;justify-content:flex-start;overflow-x:auto;} body{padding-top:112px;} .site-header{top:112px;} #studio-sidebar{top:112px;max-width:100%;} .studio-actions button{padding:7px 11px;} }
+@media(max-width:1750px) { .studio-bar{min-height:112px; flex-wrap:wrap; gap:8px 20px;} .studio-actions{width:100%;margin-left:0;justify-content:flex-start;overflow-x:auto;} body{padding-top:112px;} .site-header{top:112px;} #studio-sidebar{top:112px;max-width:100%;} .studio-actions button{padding:7px 11px;} }
 @media(max-width:850px) { .studio-panel-open, .studio-field-history-open, .studio-images-open{padding-right:0;} }
 @media print { [data-studio-chrome]{display:none !important;} body{padding:0;} .site-header{top:0;} }
 

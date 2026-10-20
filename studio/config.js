@@ -10,6 +10,17 @@ export function sitePath(path = '') {
   return `${location.hostname === 'juhosarvanco.github.io' ? SITE_BASE : '/'}${path}`;
 }
 
+export function studioLanguage() {
+  return /\/(?:en)\/studio(?:\/|$)/.test(location.pathname || '') ? 'en' : 'fi';
+}
+
+export function contentPath(path, language = studioLanguage()) {
+  if (!['fi', 'en'].includes(language) || !path.startsWith('/api/')) throw new Error('Invalid Studio content path');
+  return language === 'en' ? path.replace('/api/', '/api/en/') : path;
+}
+
+export const studioRoom = (language = studioLanguage()) => language === 'en' ? 'althea-uusi-en' : 'althea-uusi';
+
 let configuration;
 export async function studioConfiguration({ refresh = false } = {}) {
   if (!configuration || refresh) {

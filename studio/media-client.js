@@ -1,11 +1,12 @@
-import { sitePath } from './config.js';
+import { sitePath, contentPath } from './config.js';
+import { assetPath } from '../shared/site-assets.mjs';
 
 export function createMediaMode({ api, getSession, getHeading, container, toast, isConnected, onApplied, confirmAction }) {
   let enabled = false, images = [], deletedImages = [], slots = [], selected = null, draft = null, busy = false, request = 0, showDeleted = false;
   const urls = new Map(), resolvedURLs = new Map();
   const el = (tag, text, className) => { const node = document.createElement(tag); if (text !== undefined) node.textContent = text; if (className) node.className = className; return node; };
   const button = (text, action, className) => { const node = el('button', text, className); node.type = 'button'; node.onclick = action; return node; };
-  const normalize = path => String(path || '').replace(/^\//, '');
+  const normalize = path => assetPath(path) || String(path || '');
   const label = slot => slot.kind === 'background' && !slot.headingField ? slot.label
     : slot.label === 'Yläosan taustakuva' ? slot.label : getHeading(slot.headingField) || slot.label;
   const current = () => slots.find(slot => slot.id === selected);
@@ -13,7 +14,7 @@ export function createMediaMode({ api, getSession, getHeading, container, toast,
     if (!image.uploaded) return sitePath(image.path);
     if (!urls.has(image.id)) {
       const session = getSession();
-      urls.set(image.id, fetch(session.server + '/api/media-file/' + image.id,
+      urls.set(image.id, fetch(session.server + contentPath('/api/media-file/' + image.id),
         { headers: { authorization: 'Bearer ' + session.token }, signal: AbortSignal.timeout(15000) })
         .then(response => { if (!response.ok) throw new Error('Kuvan lataaminen epäonnistui.'); return response.blob(); })
         .then(blob => { const url = URL.createObjectURL(blob); resolvedURLs.set(image.path, url); return url; }).catch(error => { urls.delete(image.id); throw error; }));
@@ -134,7 +135,7 @@ export function createMediaMode({ api, getSession, getHeading, container, toast,
       for (const file of files) {
         toast(`Lisätään kuvapankkiin ${count + 1}/${files.length}: ${file.name}`);
         const blob = await optimize(file), session = getSession();
-        const response = await fetch(session.server + '/api/media-upload?name=' + encodeURIComponent(file.name),
+        const response = await fetch(session.server + contentPath('/api/media-upload?name=' + encodeURIComponent(file.name)),
           { method: 'POST', headers: { authorization: 'Bearer ' + session.token, 'content-type': 'image/webp' }, body: blob, signal: AbortSignal.timeout(60000) });
         const result = await response.json(); if (!response.ok) throw new Error(result.error || 'Kuvan tallennus epäonnistui.');
         last = result.entry; count++;

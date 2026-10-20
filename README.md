@@ -14,8 +14,12 @@ Englanninkielinen sivu on osoitteessa https://www.althea.fi/en/. Se on erillinen
 Sivulla ei ole kielenvaihtopainikkeita, eikä suomenkieliseltä sivulta ole siihen linkkiä.
 Hakukoneindeksointi on estetty tarkistuksen ajaksi.
 
-Suomenkielisen Studion julkaisu ei muuta englanninkielistä tarkistusversiota. Käännös
-päivitetään erikseen hyväksymisen jälkeen. Molemmat sivut käyttävät samaa kuvastoa ja
+Englantia muokataan osoitteessa https://www.althea.fi/en/studio/. Studion
+**Muokattava kieli** -valikosta voi vaihtaa suomen ja englannin välillä.
+Kummallakin kielellä on oma yhteinen työversio, kommentit, kuvapankki ja historia.
+**Julkaise suomi** päivittää vain etusivun ja **Julkaise englanti** vain `/en/`-sivun.
+Suomenkieliset muutokset eivät käänny automaattisesti. Sama kirjautuminen toimii
+molemmissa editoreissa. Molemmat sivut käyttävät samaa julkaistua kuvastoa ja
 yhteydenottolomakkeen vastaanottajaa. Lomakkeen viestit ja tietotekstit valitaan sivun
 kielen perusteella tiedostosta `tools/public-copy.js`.
 
@@ -64,7 +68,9 @@ Kirjoittaminen ei vielä muuta julkista sivua.
 Jos yhteys katkeaa, odota yhteyden palautumista ja tallennusilmoitusta ennen sivun sulkemista.
 Palvelimelle jo tallennetut muutokset säilyvät myös tietokoneen sammuttamisen jälkeen.
 Yhteyskatko ei poista muistettua kirjautumista. Studio yrittää yhteyttä uudelleen ja
-hakee päivitetyn yhteysosoitteen automaattisesti.
+hakee päivitetyn yhteysosoitteen automaattisesti. Jos GitHub-kirjautuminen on
+vanhentunut tai peruttu, Studio pyytää kirjautumaan uudelleen. Yhteysvirheen
+yhteydessä **Kirjaudu GitHubilla uudelleen** voi korvata vanhan selainistunnon.
 
 Tekoälylle voi pyytää: **Lue ja toteuta uuden Studion avoimet muokkauskommentit**.
 Sivun WebMCP-toiminnot antavat yhteiset tekstit ja kommentit kirjautuneessa Studiossa.
@@ -77,7 +83,8 @@ toimii aluksi Juhon Macilla omassa prosessissaan, portissa `8796`.
 HTTPS-yhteyden välittää erillinen Cloudflare-tunneli.
 
 Uuden Studion työversio, kommentit, kuvat ja historia ovat tämän projektin
-`.studio-live/data/`-kansiossa. Niitä ei viedä julkiseen repoon.
+`.studio-live/data/`-kansiossa; englannin tiedot ovat sen `en/`-alikansiossa.
+Niitä ei viedä julkiseen repoon.
 GitHubissa on julkaistu sisältö ja editorin lähdekoodi.
 Kirjautumisten yksityinen tallennus on saman kansion `github-sessions.enc`-tiedostossa.
 Se salataan Studion omalla allekirjoitusavaimella; GitHubin käyttöoikeustunnuksia ei
@@ -167,7 +174,7 @@ STUDIO_DATA_DIR=/tmp/althea-uusi-kokeilu STUDIO_PORT=8797 STUDIO_DEV=1 node stud
 ```
 
 Kokeilutila sallii vain paikallisen yhteyden eikä voi julkaista GitHubiin.
-Studio rakennetaan `site/studio/`-kansioon. GitHub Actions julkaisee vain `site/`-kansion.
+Editorit rakennetaan `site/studio/`- ja `site/en/studio/`-kansioihin.
+GitHub Actions julkaisee vain `site/`-kansion.
 
-Yhteydenottolomake on edelleen kokeiltava työversio: siitä ei lähetetä viestejä tai tehdä
-varauksia. Lopulliset yhteystiedot, ehdot ja lomakkeen lähetys lisätään erikseen.
+Studio-esikatselun lomake ei lähetä viestejä. Julkinen lomake toimii FormSubmitin kautta.

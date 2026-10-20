@@ -24,7 +24,11 @@ export function githubRequest(path, body, method = body ? 'POST' : 'GET') {
 }
 
 export class GithubPublisher {
-  constructor({ store, media, site, request = githubRequest }) { this.store = store; this.media = media; this.site = site; this.request = request; this.busy = false; }
+  constructor({ store, media, site, language = 'fi', request = githubRequest }) {
+    if (!['fi', 'en'].includes(language)) throw new Error('Unsupported publication language');
+    this.store = store; this.media = media; this.site = site; this.request = request; this.busy = false;
+    this.language = language; this.page = language === 'en' ? 'en/index.html' : 'index.html';
+  }
   async publish(body, actor) {
     if (this.busy) fail('Julkaisu on jo käynnissä. Odota hetki.', 409);
     if (typeof body.vector !== 'string' || body.vector !== vector(this.store.doc)) fail('Sisältö muuttui. Odota tallennusta ja tarkista työversio.', 409);
@@ -35,14 +39,14 @@ export class GithubPublisher {
     try {
       const prefix = `/repos/${REPOSITORY}`, branch = 'main';
       const reference = await this.request(`${prefix}/git/ref/heads/${branch}`), parent = reference.object.sha;
-      const file = await this.request(`${prefix}/contents/site/index.html?ref=${parent}`);
+      const file = await this.request(`${prefix}/contents/site/${this.page}?ref=${parent}`);
       if (file.encoding !== 'base64' || digest(Buffer.from(file.content.replace(/\n/g, ''), 'base64')) !== snapshot.publicHash)
         fail('Sivustoa muutettiin GitHubissa Studion ulkopuolella. Työversio säilyy; yhdistä muutokset ennen julkaisua.', 409);
       const htmlHash = digest(snapshot.html);
       if (htmlHash === snapshot.publicHash) return { unchanged: true, baselineUpdated: true };
       const assets = this.media.publicationAssets(snapshot.html);
       const commit = await this.request(`${prefix}/git/commits/${parent}`);
-      const tree = [{ path: 'site/index.html', mode: '100644', type: 'blob', content: snapshot.html }];
+      const tree = [{ path: `site/${this.page}`, mode: '100644', type: 'blob', content: snapshot.html }];
       for (const asset of assets) {
         if (!/^assets\/img\/studio-[a-f0-9]{64}\.webp$/.test(asset.path) || digest(Buffer.from(asset.content, 'base64')) !== asset.digest)
           fail('Julkaisun kuvassa on virhe.');
@@ -51,19 +55,19 @@ export class GithubPublisher {
       }
       const nextTree = await this.request(`${prefix}/git/trees`, { base_tree: commit.tree.sha, tree });
       const nextCommit = await this.request(`${prefix}/git/commits`, {
-        message: `Studion yhteisen työversion julkaisu (${actor.sub})`, tree: nextTree.sha, parents: [parent],
+        message: `Studion ${this.language === 'en' ? 'englanninkielisen' : 'suomenkielisen'} työversion julkaisu (${actor.sub})`, tree: nextTree.sha, parents: [parent],
         author: { name: actor.name, email: `${actor.sub}@users.noreply.github.com` } });
       // A concurrent commit cannot be overwritten: never force-advance the branch.
       await this.request(`${prefix}/git/refs/heads/${branch}`, { sha: nextCommit.sha, force: false }, 'PATCH');
       this.store.published(snapshot.publicHash, htmlHash);
       this.store.checkpoint('Julkaistu GitHub Pagesiin', actor.name);
       // Keep the local bootstrap in step with publications for future restarts.
-      await writeFile(join(this.site, 'index.html.next'), snapshot.html);
-      await rename(join(this.site, 'index.html.next'), join(this.site, 'index.html'));
+      await writeFile(join(this.site, this.page + '.next'), snapshot.html);
+      await rename(join(this.site, this.page + '.next'), join(this.site, this.page));
       for (const asset of assets) {
         const target = join(this.site, asset.path); await writeFile(target + '.next', Buffer.from(asset.content, 'base64')); await rename(target + '.next', target);
       }
-      return { baselineUpdated: true, commit: `https://github.com/${REPOSITORY}/commit/${nextCommit.sha}`, website: 'https://juhosarvanco.github.io/althea-studio-uusi/' };
+      return { baselineUpdated: true, commit: `https://github.com/${REPOSITORY}/commit/${nextCommit.sha}`, website: `https://www.althea.fi/${this.language === 'en' ? 'en/' : ''}` };
     } finally { this.busy = false; }
   }
 }

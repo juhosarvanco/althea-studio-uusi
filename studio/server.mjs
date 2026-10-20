@@ -28,17 +28,39 @@ export async function createStudioServer(options = {}) {
   const origins = options.origins || (process.env.STUDIO_ORIGINS || '').split(',').filter(Boolean);
   if (!development && (secret.length < 32 || !allowed.length || !origins.length))
     throw new Error('Set STUDIO_SECRET, ALLOWED_LOGINS and STUDIO_ORIGINS before serving remote users.');
-  const manifest = JSON.parse(await readFile(join(root, 'site/studio/manifest.json')));
-  const store = new StudioStore(options.dataDir || process.env.STUDIO_DATA_DIR || join(root, '.studio-data'),
-    manifest, await readFile(join(root, 'site/studio/template.html'), 'utf8'));
-  const media = new MediaLibrary(store.directory, join(root, 'site'), store.template);
+  // Separate documents, journals, comments, media and publication baselines.
+  // Finnish keeps its original directory so existing drafts and sessions survive.
+  const contexts = new Map();
+  const directory = options.dataDir || process.env.STUDIO_DATA_DIR || join(root, '.studio-data');
+  try {
+    for (const language of ['fi', 'en']) {
+      const editor = language === 'en' ? 'site/en/studio' : 'site/studio';
+      const manifest = JSON.parse(await readFile(join(root, editor, 'manifest.json')));
+      const store = new StudioStore(language === 'en' ? join(directory, 'en') : directory,
+        manifest, await readFile(join(root, editor, 'template.html'), 'utf8'));
+      const context = { language, store, connections: new Map(), layoutSubscribers: new Set(), mediaSubscribers: new Set() };
+      contexts.set(language, context);
+      context.media = new MediaLibrary(store.directory, join(root, 'site'), store.template);
+      context.publisher = options.publishers?.[language] || (language === 'fi' && options.publisher)
+        || new GithubPublisher({ store, media: context.media, site: join(root, 'site'), language });
+      context.online = new awareness.Awareness(store.doc); context.online.setLocalState(null);
+      context.broadcast = bytes => { for (const socket of context.connections.keys()) if (socket.readyState === 1) socket.send(bytes); };
+      context.ack = () => packet(4, new TextEncoder().encode(vector(store.doc)));
+      context.layoutNotice = () => packet(5, new TextEncoder().encode(JSON.stringify({ layoutHash: store.manifest.layoutHash })));
+      store.doc.on('update', update => {
+        const e = encoding.createEncoder(); encoding.writeVarUint(e, 0); sync.writeUpdate(e, update);
+        context.broadcast(encoding.toUint8Array(e)); context.broadcast(context.ack());
+      });
+      store.on('layout', () => { const notice = context.layoutNotice(); for (const socket of context.layoutSubscribers) if (socket.readyState === 1) socket.send(notice); });
+      context.online.on('update', ({ added, updated, removed }) => context.broadcast(packet(1, awareness.encodeAwarenessUpdate(context.online, [...added, ...updated, ...removed]))));
+    }
+  } catch (error) {
+    for (const { store, online } of contexts.values()) { online?.destroy(); store.close(); }
+    throw error;
+  }
+  const { store, media } = contexts.get('fi');
   const login = options.login || new GithubLogin({ clientId: process.env.GITHUB_CLIENT_ID || '', allowed,
     ...(!development ? { directory: store.directory, secret } : {}) });
-  const publisher = options.publisher || new GithubPublisher({ store, media, site: join(root, 'site') });
-  const online = new awareness.Awareness(store.doc); online.setLocalState(null);
-  const connections = new Map();
-  const layoutSubscribers = new Set();
-  const mediaSubscribers = new Set();
   const acceptedOrigins = new Set(origins);
   const authenticate = req => {
     const user = verifyStudioToken((req.headers.authorization || '').replace(/^Bearer /, ''), secret, development ? ['juho', 'julia'] : allowed);
@@ -50,15 +72,6 @@ export async function createStudioServer(options = {}) {
     for await (const chunk of req) { size += chunk.length; if (size > limit) { const error = new Error('Request too large'); error.status = 413; throw error; } chunks.push(chunk); }
     return JSON.parse(Buffer.concat(chunks).toString() || '{}');
   };
-  const broadcast = bytes => { for (const socket of connections.keys()) if (socket.readyState === 1) socket.send(bytes); };
-  const ack = () => packet(4, new TextEncoder().encode(vector(store.doc)));
-  store.doc.on('update', update => {
-    const e = encoding.createEncoder(); encoding.writeVarUint(e, 0); sync.writeUpdate(e, update);
-    broadcast(encoding.toUint8Array(e)); broadcast(ack());
-  });
-  const layoutNotice = () => packet(5, new TextEncoder().encode(JSON.stringify({ layoutHash: store.manifest.layoutHash })));
-  store.on('layout', () => { const notice = layoutNotice(); for (const socket of layoutSubscribers) if (socket.readyState === 1) socket.send(notice); });
-  online.on('update', ({ added, updated, removed }) => broadcast(packet(1, awareness.encodeAwarenessUpdate(online, [...added, ...updated, ...removed]))));
   function response(req, res, status, body, headers = {}) {
     const origin = req.headers.origin;
     res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store',
@@ -93,7 +106,8 @@ export async function createStudioServer(options = {}) {
         const credential = (req.headers.authorization || '').replace(/^Bearer /, '');
         if (!credential.startsWith('althea-remember.')) return response(req, res, 401, { error: 'Kirjaudu uudelleen.' });
         const user = login.logout(credential.slice('althea-remember.'.length));
-        for (const socket of connections.keys()) if (socket.studioUser?.sid === user.sid) socket.close(4001, 'Signed out');
+        for (const { connections } of contexts.values())
+          for (const socket of connections.keys()) if (socket.studioUser?.sid === user.sid) socket.close(4001, 'Signed out');
         return response(req, res, 200, { ok: true });
       }
       if (url.pathname === '/api/studio-session' && development) {
@@ -106,7 +120,10 @@ export async function createStudioServer(options = {}) {
         return response(req, res, 200, { user, token: issueStudioToken(user, secret), server: `http://${req.headers.host}`, development: true });
       }
       if (url.pathname.startsWith('/api/')) {
-        const localLayout = url.pathname === '/api/local-layout';
+        const context = contexts.get(url.pathname.startsWith('/api/en/') ? 'en' : 'fi');
+        const { store, media, publisher, mediaSubscribers } = context;
+        const path = url.pathname.replace(/^\/api\/en\//, '/api/');
+        const localLayout = path === '/api/local-layout';
         let user;
         if (localLayout) {
           const requestedHost = (req.headers.host || '').split(':')[0];
@@ -118,15 +135,15 @@ export async function createStudioServer(options = {}) {
             return response(req, res, 403, { error: 'Local operator only' });
           user = { sub: 'althea-layout', name: 'Ulkoasupäivitys' };
         } else user = authenticate(req);
-        if (req.method === 'POST' && url.pathname === '/api/studio-publish') {
+        if (req.method === 'POST' && path === '/api/studio-publish') {
           if (development) return response(req, res, 403, { error: 'Local testing cannot publish.' });
           if (!acceptedOrigins.has(req.headers.origin)) return response(req, res, 403, { error: 'Origin not allowed' });
           return response(req, res, 200, await publisher.publish(await readBody(req), user));
         }
-        if (req.method === 'GET' && url.pathname === '/api/media') return response(req, res, 200, mediaView(media, store.layout));
-        if (req.method === 'GET' && url.pathname.startsWith('/api/media-file/'))
-          return response(req, res, 200, media.read(url.pathname.slice('/api/media-file/'.length)), { 'content-type': 'image/webp', 'content-security-policy': "default-src 'none'" });
-        if (req.method === 'POST' && url.pathname === '/api/media-upload') {
+        if (req.method === 'GET' && path === '/api/media') return response(req, res, 200, mediaView(media, store.layout));
+        if (req.method === 'GET' && path.startsWith('/api/media-file/'))
+          return response(req, res, 200, media.read(path.slice('/api/media-file/'.length)), { 'content-type': 'image/webp', 'content-security-policy': "default-src 'none'" });
+        if (req.method === 'POST' && path === '/api/media-upload') {
           const chunks = []; let size = 0;
           for await (const chunk of req) { size += chunk.length; if (size > MAX_IMAGE_BYTES) { const error = new Error('Kuva on liian suuri (enintään 2 Mt).'); error.status = 413; throw error; } chunks.push(chunk); }
           const result = media.upload(Buffer.concat(chunks), url.searchParams.get('name'), user);
@@ -141,25 +158,25 @@ export async function createStudioServer(options = {}) {
         }
         if (localLayout && req.method === 'GET') return response(req, res, 200, store.export());
         if (localLayout && req.method === 'POST') return response(req, res, 200, store.applyLayout(body.html, body.layoutHash, user));
-        if (req.method === 'POST' && ['/api/media-delete', '/api/media-restore'].includes(url.pathname)) {
-          const result = url.pathname === '/api/media-delete' ? removeImage(store, media, body, user) : media.restore(body.mediaId);
+        if (req.method === 'POST' && ['/api/media-delete', '/api/media-restore'].includes(path)) {
+          const result = path === '/api/media-delete' ? removeImage(store, media, body, user) : media.restore(body.mediaId);
           for (const socket of mediaSubscribers) if (socket.readyState === 1) socket.send(packet(6, new Uint8Array()));
           return response(req, res, 200, result);
         }
-        if (req.method === 'POST' && url.pathname === '/api/media-assign') return response(req, res, 200, changeImage(store, media, body, user));
-        if (req.method === 'GET' && url.pathname === '/api/layout') return response(req, res, 200, store.layoutView());
-        if (req.method === 'GET' && url.pathname === '/api/versions') return response(req, res, 200, { versions: store.versions() });
-        if (req.method === 'GET' && url.pathname === '/api/field-history')
+        if (req.method === 'POST' && path === '/api/media-assign') return response(req, res, 200, changeImage(store, media, body, user));
+        if (req.method === 'GET' && path === '/api/layout') return response(req, res, 200, store.layoutView());
+        if (req.method === 'GET' && path === '/api/versions') return response(req, res, 200, { versions: store.versions() });
+        if (req.method === 'GET' && path === '/api/field-history')
           return response(req, res, 200, store.fieldHistory(url.searchParams.get('fieldId')));
-        if (req.method === 'POST' && url.pathname === '/api/field-restore')
+        if (req.method === 'POST' && path === '/api/field-restore')
           return response(req, res, 200, store.restoreField(body.fieldId, body.id, body.expectedHash, body.versionHash, user));
-        if (req.method === 'POST' && url.pathname === '/api/published') {
+        if (req.method === 'POST' && path === '/api/published') {
           store.published(body.previousHash, body.publicHash);
           store.checkpoint('Julkaistu sivustolle', user.name); return response(req, res, 200, { ok: true });
         }
-        if (req.method === 'POST' && ['/api/export', '/api/checkpoint', '/api/restore'].includes(url.pathname)) {
+        if (req.method === 'POST' && ['/api/export', '/api/checkpoint', '/api/restore'].includes(path)) {
           if (body.vector !== vector(store.doc)) return response(req, res, 409, { error: 'Sisältö muuttui. Odota tallennusta ja yritä uudelleen.' });
-          if (url.pathname === '/api/export') {
+          if (path === '/api/export') {
             const snapshot = store.export(), publication = { ...snapshot, assets: media.publicationAssets(snapshot.html) };
             // Leave room below the hosted publishing function's response limit,
             // including base64 expansion and the exported page itself.
@@ -167,7 +184,7 @@ export async function createStudioServer(options = {}) {
               return response(req, res, 413, { error: 'Julkaisun kuvat ovat yhteensä liian suuria. Käytä pienempiä kuvia ja yritä uudelleen.' });
             return response(req, res, 200, publication);
           }
-          if (url.pathname === '/api/checkpoint') return response(req, res, 200, store.checkpoint(body.title, user.name));
+          if (path === '/api/checkpoint') return response(req, res, 200, store.checkpoint(body.title, user.name));
           return response(req, res, 200, store.restore(body.id, body.vector, user));
         }
         return response(req, res, 404, { error: 'Unknown route' });
@@ -188,14 +205,17 @@ export async function createStudioServer(options = {}) {
   http.on('upgrade', (req, socket, head) => {
     try {
       const url = new URL(req.url, 'http://localhost');
-      if (url.pathname !== '/sync/althea-uusi' || !acceptedOrigins.has(req.headers.origin)) throw new Error('Origin not allowed');
+      const language = url.pathname === '/sync/althea-uusi' ? 'fi' : url.pathname === '/sync/althea-uusi-en' ? 'en' : null;
+      if (!language || !acceptedOrigins.has(req.headers.origin)) throw new Error('Origin not allowed');
+      const context = contexts.get(language);
       const protocol = (req.headers['sec-websocket-protocol'] || '').split(',').map(value => value.trim()).find(value => value.startsWith('althea-auth.'));
       const user = verifyStudioToken(protocol?.slice(12), secret, development ? ['juho', 'julia'] : allowed);
       if (!development) login.check(user);
-      sockets.handleUpgrade(req, socket, head, ws => sockets.emit('connection', ws, user));
+      sockets.handleUpgrade(req, socket, head, ws => sockets.emit('connection', ws, user, context));
     } catch { socket.end('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n'); }
   });
-  sockets.on('connection', (socket, user) => {
+  sockets.on('connection', (socket, user, context) => {
+    const { store, online, connections, layoutSubscribers, mediaSubscribers, ack, layoutNotice } = context;
     const ids = new Set(); connections.set(socket, ids);
     socket.studioUser = user; socket.alive = true;
     socket.on('pong', () => socket.alive = true);
@@ -247,9 +267,9 @@ export async function createStudioServer(options = {}) {
     const e = encoding.createEncoder(); encoding.writeVarUint(e, 0); sync.writeSyncStep1(e, store.doc); socket.send(encoding.toUint8Array(e));
     socket.send(packet(1, awareness.encodeAwarenessUpdate(online, [...online.getStates().keys()])));
   });
-  const timer = setInterval(() => { if (connections.size) store.checkpoint('Automaattinen versio', 'Althea'); }, 15 * 60 * 1000); timer.unref();
+  const timer = setInterval(() => { for (const { connections, store } of contexts.values()) if (connections.size) store.checkpoint('Automaattinen versio', 'Althea'); }, 15 * 60 * 1000); timer.unref();
   const heartbeat = setInterval(() => {
-    for (const socket of connections.keys()) {
+    for (const { connections } of contexts.values()) for (const socket of connections.keys()) {
       if (!socket.alive) { socket.terminate(); continue; }
       socket.alive = false; socket.ping();
     }
@@ -257,9 +277,10 @@ export async function createStudioServer(options = {}) {
   await new Promise((resolve, reject) => { http.once('error', reject); http.listen(options.port ?? Number(process.env.STUDIO_PORT || 8796), host, resolve); });
   const port = http.address().port;
   if (development) { acceptedOrigins.add(`http://127.0.0.1:${port}`); acceptedOrigins.add(`http://localhost:${port}`); }
-  return { http, store, media, port, secret, close: async () => {
-    clearInterval(timer); clearInterval(heartbeat); for (const socket of connections.keys()) socket.terminate();
-    await new Promise(resolve => sockets.close(resolve)); await new Promise(resolve => http.close(resolve)); online.destroy(); store.close();
+  return { http, store, media, contexts, port, secret, close: async () => {
+    clearInterval(timer); clearInterval(heartbeat); for (const { connections } of contexts.values()) for (const socket of connections.keys()) socket.terminate();
+    await new Promise(resolve => sockets.close(resolve)); await new Promise(resolve => http.close(resolve));
+    for (const { online, store } of contexts.values()) { online.destroy(); store.close(); }
   } };
 }
 

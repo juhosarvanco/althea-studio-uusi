@@ -10,11 +10,13 @@ import { diffWords } from './diff.mjs';
 import { reconcileLayout, startPageBehavior } from './live-layout.js';
 import { createAnnotationPicker, anchorFor, anchorElement, elementLabel, textRange } from './annotations.js';
 import { createMediaMode } from './media-client.js';
-import { studioConfiguration, connectionMessage } from './config.js';
+import { studioConfiguration, connectionMessage, studioLanguage, studioRoom, contentPath, sitePath } from './config.js';
 import { sessionCache, needsLogin } from './session-cache.mjs';
 import { participants } from './presence.mjs';
 
 const $ = selector => document.querySelector(selector);
+const language = studioLanguage();
+const languageName = language === 'en' ? 'englanninkielinen' : 'suomenkielinen';
 const doc = new Y.Doc();
 const editors = new Map();
 let session, provider, activeField = null, editing = true, connected = false, persisted = '', panel = null, mounted = false;
@@ -41,7 +43,7 @@ const status = () => {
   $('#studio-publish').disabled = !durable();
 };
 async function api(path, body) {
-  const response = await fetch(session.server + path, { method: body ? 'POST' : 'GET',
+  const response = await fetch(session.server + contentPath(path), { method: body ? 'POST' : 'GET',
     headers: { authorization: `Bearer ${session.token}`, ...(body ? { 'content-type': 'application/json' } : {}) },
     ...(body ? { body: JSON.stringify(body) } : {}), signal: AbortSignal.timeout(15000) });
   const result = await response.json();
@@ -359,7 +361,7 @@ function registerTools() {
     } });
   const string = { type: 'string' };
   tool('althea_read_fields', 'Lue Althean yhteisen työversion tekstikohdat ja niiden pysyvät fieldId-tunnisteet. Ei muuta sisältöä.', {}, [],
-    () => [...editors].map(([id, editor]) => ({ fieldId: id, text: editor.getText(), archived: !!layout?.archived.some(field => field.id === id) })), true);
+    () => [...editors].map(([id, editor]) => ({ language, fieldId: id, text: editor.getText(), archived: !!layout?.archived.some(field => field.id === id) })), true);
   tool('althea_edit_text', 'Muokkaa yhtä tekstikohtaa yhteisessä työversiossa. Lue tuore sisältö ensin: expectedText on vastattava nykyistä tekstiä täsmälleen. Muutos näkyy muille heti, mutta ei julkaise sivustoa.',
     { fieldId: string, expectedText: string, text: string }, ['fieldId', 'expectedText', 'text'], ({ fieldId, expectedText, text }) => {
       if (!connected || !provider.synced) throw new Error('Yhteys ei ole valmis.');
@@ -368,7 +370,7 @@ function registerTools() {
       if (text.length > 20000) throw new Error('Teksti on liian pitkä.');
       const content = text.split('\n').flatMap((line, index) => [...(index ? [{ type: 'hardBreak' }] : []), ...(line ? [{ type: 'text', text: line }] : [])]);
       editor.commands.setContent({ type: 'doc', content: [{ type: 'paragraph', content }] }); select(fieldId);
-      return { fieldId, text: editor.getText(), published: false };
+      return { language, fieldId, text: editor.getText(), published: false };
     });
   tool('althea_add_comment', 'Lisää tekstikohtaan yhteinen kommentti, jonka molemmat muokkaajat näkevät.',
     { fieldId: string, body: string }, ['fieldId', 'body'], ({ fieldId, body }) => ({ id: addComment(fieldId, body) }));
@@ -407,10 +409,11 @@ function sessionFailure(error) {
   } else recoverSession();
   if (loginRequired || !mounted) {
     $('#studio-gate-message').textContent = loginRequired
-      ? 'Kirjaudu omalla GitHub-tunnuksellasi. Muutokset tallentuvat tähän erilliseen Studioon.'
+      ? `${error.message} Kirjaudu omalla GitHub-tunnuksellasi. Tallennetut tekstit ja kommentit säilyvät.`
       : `${credentials.credential(session) ? 'Kirjautumisesi on tallessa. ' : ''}${connectionMessage(error)} Yhteyttä yritetään automaattisesti uudelleen.`;
     $('#studio-login').hidden = !loginRequired;
     $('#studio-reconnect').hidden = loginRequired;
+    if ($('#studio-login-reset')) $('#studio-login-reset').hidden = loginRequired || !credentials.credential(session);
     if (!$('#studio-gate').open) $('#studio-gate').showModal();
   } else toast('Yhteys odottaa. Kirjautuminen säilyy ja yhteyttä yritetään uudelleen.');
 }
@@ -427,6 +430,14 @@ async function renewSession() {
   catch (error) { sessionFailure(error); }
 }
 let loginSequence = 0;
+if ($('#studio-login-reset')) $('#studio-login-reset').onclick = async () => {
+  // A stale browser session can be replaced explicitly without touching drafts.
+  if (mounted && (!durable() || commentDraft.trim())) return toast('Odota muutosten tallennusta ennen uutta kirjautumista.');
+  credentials.clear(); session = null; awaitingLogin = true; clearTimeout(recoveryTimer);
+  $('#studio-login-reset').hidden = true;
+  $('#studio-login').hidden = false; $('#studio-reconnect').hidden = true;
+  $('#studio-login').click();
+};
 $('#studio-reconnect').onclick = async () => {
   const button = $('#studio-reconnect');
   button.disabled = true;
@@ -478,7 +489,7 @@ async function initialize() {
     $('#studio-gate').close();
     if (provider) { connectSession(); await refreshLayout(); await mediaMode.refresh(); return; }
     const Socket = class extends WebSocket { constructor(url) { super(url, [`althea-auth.${session.token}`]); } };
-    provider = new WebsocketProvider(session.server.replace(/^http/, 'ws') + '/sync', 'althea-uusi', doc,
+    provider = new WebsocketProvider(session.server.replace(/^http/, 'ws') + '/sync', studioRoom(), doc,
       { WebSocketPolyfill: Socket, disableBc: true });
     provider.messageHandlers[4] = (_, decoder) => { persisted = new TextDecoder().decode(decoding.readVarUint8Array(decoder)); status(); };
     provider.messageHandlers[5] = () => { refreshLayout(); };
@@ -552,6 +563,13 @@ $('#studio-archive-close').onclick = () => {
   dock.hidden = true;
 };
 $('#studio-field-history').onclick = () => showPanel('field-history');
+if ($('#studio-language')) $('#studio-language').onchange = event => {
+  if (mounted && (!durable() || commentDraft.trim())) {
+    event.target.value = language;
+    return toast('Odota tekstien tallennusta ja tallenna keskeneräinen kommentti ennen kielen vaihtamista.');
+  }
+  location.href = sitePath(event.target.value === 'en' ? 'en/studio/' : 'studio/');
+};
 $('#studio-close').onclick = () => { mediaMode.setEnabled(false); setAnnotationMode(false); picker.clear(); panel = null; clearTimeout(historyTimer); $('#studio-sidebar').hidden = true; document.body.classList.remove('studio-panel-open', 'studio-field-history-open', 'studio-images-open'); };
 $('#studio-publish').disabled = true;
 $('#studio-publish').onclick = async () => {
@@ -563,10 +581,10 @@ $('#studio-publish').onclick = async () => {
       link.href = url; link.download = 'althea-yhteinen-versio.html'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
       toast('Yhteinen sivu ladattu tiedostoksi.'); return;
     }
-    if (!await confirmation('Julkaistaanko yhteinen työversio?', 'Molempien muokkaajien tämänhetkiset tekstit julkaistaan sivustolle. Versio tallennetaan historiaan.', 'Julkaise')) return;
+    if (!await confirmation(`Julkaistaanko ${languageName} työversio?`, `Molempien muokkaajien tämänhetkiset tekstit julkaistaan osoitteeseen www.althea.fi/${language === 'en' ? 'en/' : ''}. Versio tallennetaan tämän kielen historiaan.`, language === 'en' ? 'Julkaise englanti' : 'Julkaise suomi')) return;
     $('#studio-publish').disabled = true;
     const result = await api('/api/studio-publish', { vector: stateVector(), layoutHash: layout.layoutHash });
-    toast(result.unchanged ? 'Sivusto on jo ajan tasalla.' : 'Julkaistu uuteen GitHub-repoon. GitHub Pages päivittyy hetken kuluttua.'); status();
+    toast(result.unchanged ? 'Sivusto on jo ajan tasalla.' : `${language === 'en' ? 'Englanninkielinen' : 'Suomenkielinen'} sivu julkaistu. Sivusto päivittyy hetken kuluttua.`); status();
   } catch (error) { toast(error.message); status(); }
 };
 // Layout updates replace the form; keep email delivery disabled inside Studio.

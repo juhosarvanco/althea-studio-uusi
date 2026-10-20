@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, readFile, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -9,11 +9,12 @@ import { StudioStore, vector } from '../store.mjs';
 import { prepareTemplate } from '../template.mjs';
 import { GithubPublisher, REPOSITORY, githubRequest } from '../publish.mjs';
 const digest = value => createHash('sha256').update(value).digest('hex');
-async function setup(t, baselineChanged = false) {
+async function setup(t, baselineChanged = false, language = 'fi') {
   const directory = await mkdtemp(join(tmpdir(), 'new-studio-publication-'));
   const source = '<!doctype html><html><head></head><body><main><section id="alku"><h1>Alkuperäinen otsikko</h1></section></main></body></html>';
   const prepared = prepareTemplate(source), store = new StudioStore(join(directory, 'data'), prepared.manifest, prepared.template);
-  await writeFile(join(directory, 'index.html'), source);
+  await mkdir(join(directory, 'en'));
+  await writeFile(join(directory, language === 'en' ? 'en/index.html' : 'index.html'), source);
   t.after(async () => { store.close(); await rm(directory,{recursive:true,force:true}); });
   const calls = [];
   const request = async (path, body, method) => {
@@ -26,7 +27,7 @@ async function setup(t, baselineChanged = false) {
     if(path.includes('/git/refs/heads/'))return {};
     throw Error('Unexpected request');
   };
-  const publisher = new GithubPublisher({store,media:{publicationAssets:()=>[]},site:directory,request});
+  const publisher = new GithubPublisher({store,media:{publicationAssets:()=>[]},site:directory,language,request});
   return {store,publisher,calls,directory};
 }
 test('publication targets only the new repo, checks the public baseline and never force-updates the branch', async t => {
@@ -66,4 +67,19 @@ test('typing that arrives during publication remains in the shared document for 
   assert.ok(store.export().html.includes('Julian uusi teksti.'));
   assert.ok(!calls.find(call=>call.path.endsWith('/git/trees')).body.tree[0].content.includes('Julian uusi teksti.'));
   assert.equal(store.export().publicHash,digest(before.html));
+});
+
+test('English publication checks and updates /en only, preserving the Finnish page', async t => {
+  const { store, publisher, calls, directory } = await setup(t, false, 'en');
+  const finnish = 'Finnish publication must remain unchanged';
+  await writeFile(join(directory, 'index.html'), finnish);
+  const snapshot = store.export();
+  const result = await publisher.publish({ vector: snapshot.vector, layoutHash: snapshot.layoutHash }, { sub: 'juliagrahn', name: 'Julia' });
+  assert.equal(result.website, 'https://www.althea.fi/en/');
+  assert.ok(calls.some(call => call.path.endsWith('/contents/site/en/index.html?ref=parent')));
+  const tree = calls.find(call => call.path.endsWith('/git/trees')).body.tree;
+  assert.deepEqual(tree.map(entry => entry.path), ['site/en/index.html']);
+  assert.equal(await readFile(join(directory, 'index.html'), 'utf8'), finnish);
+  assert.equal(await readFile(join(directory, 'en/index.html'), 'utf8'), snapshot.html);
+  assert.equal(store.export().publicHash, digest(snapshot.html));
 });
