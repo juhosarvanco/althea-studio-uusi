@@ -4,8 +4,11 @@ import { fileURLToPath } from 'node:url';
 import { join, dirname } from 'node:path';
 import { prepareTemplate } from '../studio/template.mjs';
 import { rewriteAssets } from '../shared/site-assets.mjs';
+import { studioAddress } from '../shared/studio-address.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+// A release must never accidentally point visitors at localhost or a LAN IP.
+if (process.env.GITHUB_ACTIONS) studioAddress(process.env.STUDIO_SERVER_URL);
 // Bundle the shared gallery controls into the public page's deferred script.
 // A separate async import allowed the first arrow click to arrive too early.
 await build({ entryPoints: [join(root, 'tools/public-app.js')], bundle: true, format: 'iife',

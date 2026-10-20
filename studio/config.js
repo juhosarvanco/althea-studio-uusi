@@ -1,3 +1,4 @@
+import { studioAddress } from '../shared/studio-address.mjs';
 export const SITE_BASE = '/althea-studio-uusi/';
 
 export function connectionMessage(error) {
@@ -27,10 +28,8 @@ export async function studioConfiguration({ refresh = false } = {}) {
     const response = await fetch(sitePath('studio/config.json'), { cache: 'no-store' });
     if (!response.ok) throw new Error('Studion yhteysasetuksia ei voitu avata.');
     const data = await response.json();
-    const url = new URL(['localhost', '127.0.0.1'].includes(location.hostname) ? location.origin : data.server);
-    if ((url.protocol !== 'https:' && !(url.protocol === 'http:' && ['127.0.0.1', 'localhost'].includes(url.hostname)))
-      || url.username || url.password || url.search || url.hash || url.pathname !== '/') throw new Error('Studion yhteysosoite ei ole kelvollinen.');
-    configuration = { server: url.origin };
+    const local = ['localhost', '127.0.0.1'].includes(location.hostname);
+    configuration = { server: studioAddress(local ? location.origin : data.server, { local }) };
   }
   return configuration;
 }

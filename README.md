@@ -92,6 +92,15 @@ tallenneta selaimeen, julkiseen repoon tai sivun sisältövienteihin.
 
 Mac ja internetyhteys tarvitaan yhteismuokkaukseen. Näyttö saa sammua.
 Julkinen GitHub Pages -sivu toimii myös Macin ollessa pois päältä.
+Julia ja Juho voivat käyttää eri Wi-Fi- tai mobiiliverkkoja. Selain käyttää
+julkista HTTPS-yhteyttä; Macin lähiverkon osoitetta ei jaeta muokkaajille.
+Julkaisu estetään, jos etäyhteyden asetukseksi jäisi paikallinen osoite.
+
+Internetistä tulevan yhteyden voi tarkistaa GitHub Actionsin manuaalisella
+**Tarkista Studion yhteys ulkoverkosta** -työnkululla. Se tarkistaa DNS:n,
+HTTPS:n, selaimen yhteysluvat ja molempien kielten WebSocket-yhteyden
+GitHubin palvelimelta. Tarkistus ei käytä kirjautumistunnuksia eikä lue tekstejä
+tai kommentteja. Sama tarkistus paikallisesti: `node tools/check-studio-connection.mjs`.
 
 ## Palvelimen käyttö
 
