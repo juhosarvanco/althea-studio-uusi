@@ -28,7 +28,7 @@
     "@tiptap/core": "^3.31.4",
     "@tiptap/extension-bold": "^3.31.4",
     "@tiptap/extension-collaboration": "^3.31.4",
-    "@tiptap/extension-document": "^3.31.4",
+    "@tiptap/extension-document": "^3.32.0",
     "@tiptap/extension-hard-break": "^3.31.4",
     "@tiptap/extension-italic": "^3.31.4",
     "@tiptap/extension-link": "^3.31.4",
