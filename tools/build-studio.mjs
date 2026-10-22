@@ -6,6 +6,7 @@ import { prepareTemplate } from '../studio/template.mjs';
 import { rewriteAssets } from '../shared/site-assets.mjs';
 import { studioAddress } from '../shared/studio-address.mjs';
 import { studioPolicy } from '../studio/security.mjs';
+import { applySiteIcons } from '../shared/site-icons.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 // A release must never accidentally point visitors at localhost or a LAN IP.
@@ -40,6 +41,7 @@ for (const language of ['fi', 'en']) {
   }
   for (const style of document.querySelectorAll('style')) style.textContent = rewriteAssets(style.textContent, editorBase);
   document.title = `Althea Studio — ${language === 'en' ? 'English' : 'Suomi'}`;
+  applySiteIcons(document, editorBase);
   document.documentElement.setAttribute('data-studio-language', language);
   document.querySelectorAll('script:not([type="application/json"])').forEach(el => el.remove());
   document.querySelectorAll('meta[http-equiv="Content-Security-Policy"]').forEach(el => el.remove());

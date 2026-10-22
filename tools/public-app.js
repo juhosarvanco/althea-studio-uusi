@@ -2,8 +2,11 @@ import { startGalleries } from "../site/gallery.js";
 import { startContactForm } from './contact-form.js';
 import { publicCopy } from './public-copy.js';
 import contactFormStyles from '../site/contact-form.css';
+import { applySiteIcons } from '../shared/site-icons.mjs';
 
 (() => {
+  const appURL = document.currentScript?.src || document.querySelector('script[src$="app.js"]')?.src || document.baseURI;
+  applySiteIcons(document, new URL('.', appURL).href);
   const confirmationStyles = document.createElement('style');
   confirmationStyles.textContent = contactFormStyles;
   document.head.append(confirmationStyles);

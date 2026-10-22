@@ -190,8 +190,26 @@
   // site/contact-form.css
   var contact_form_default = '.contact-panel[data-contact-state="success"] {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n}\n.contact-panel[data-contact-state="success"] > h3 { display: none; }\n#contact-form[data-state="success"] { width: 100%; }\n#contact-status[data-state="success"] {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: 16px;\n  margin: 0;\n  padding: 32px 0;\n  color: var(--ink);\n  font-size: 18px;\n  line-height: 1.7;\n  text-align: center;\n  outline: none;\n}\n.contact-success-icon {\n  display: grid;\n  place-items: center;\n  width: 60px;\n  height: 60px;\n  margin-bottom: 6px;\n  border-radius: 50%;\n  background: var(--sage);\n  color: var(--accent);\n}\n.contact-success-icon::after {\n  content: "";\n  width: 11px;\n  height: 22px;\n  border: solid currentColor;\n  border-width: 0 2px 2px 0;\n  transform: translateY(-3px) rotate(45deg);\n}\n.contact-success-title {\n  font-family: Lora, Georgia, serif;\n  font-size: clamp(24px, 2.5vw, 28px);\n  line-height: 1.3;\n  text-wrap: balance;\n}\n.contact-success-message { color: var(--body); }\n';
 
+  // shared/site-icons.mjs
+  function applySiteIcons(document2, base) {
+    document2.querySelectorAll("link[data-althea-icon]").forEach((link) => link.remove());
+    for (const attributes of [
+      { rel: "icon", href: "favicon.ico", sizes: "16x16 32x32 48x48", type: "image/x-icon" },
+      { rel: "icon", href: "favicon-32.png", sizes: "32x32", type: "image/png" },
+      { rel: "icon", href: "favicon.svg", sizes: "any", type: "image/svg+xml" },
+      { rel: "apple-touch-icon", href: "apple-touch-icon.png", sizes: "180x180" }
+    ]) {
+      const link = document2.createElement("link");
+      link.setAttribute("data-althea-icon", "");
+      for (const [name, value] of Object.entries(attributes)) link.setAttribute(name, name === "href" ? base + value : value);
+      document2.head.append(link);
+    }
+  }
+
   // tools/public-app.js
   (() => {
+    const appURL = document.currentScript?.src || document.querySelector('script[src$="app.js"]')?.src || document.baseURI;
+    applySiteIcons(document, new URL(".", appURL).href);
     const confirmationStyles = document.createElement("style");
     confirmationStyles.textContent = contact_form_default;
     document.head.append(confirmationStyles);
