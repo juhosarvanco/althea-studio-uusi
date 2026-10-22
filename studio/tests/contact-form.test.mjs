@@ -53,12 +53,17 @@ test('English form messages preserve details on failure and clear them only afte
   finish(Response.json({ success: 'false' }));
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(status.textContent, publicCopy(document).error);
+  assert.notEqual(form.dataset.state, 'success');
+  assert.equal(button.hidden, false);
   assert.equal(form.querySelector('input').value, 'Review test');
   assert.equal(button.textContent, 'Send your request');
   form.dispatchEvent(new Event('submit', { cancelable: true }));
   finish(Response.json({ success: 'true' }));
   await new Promise(resolve => setImmediate(resolve));
-  assert.equal(status.textContent, 'Thank you! Your request has been sent. We’ll reply within two working days.');
+  assert.equal(status.textContent, 'Thank you for getting in touch! We’ll get back to you soon.');
+  assert.equal(status.querySelector('[role="heading"]').textContent, 'Thank you for getting in touch!');
+  assert.equal(form.dataset.state, 'success');
+  assert.equal(button.hidden, true);
   assert.equal(form.querySelector('input').value, '');
   assert.equal(form.hasAttribute('aria-busy'), false);
 });
@@ -69,4 +74,5 @@ test('Finnish pages retain Finnish feedback and regional English uses English fe
   assert.equal(publicCopy(en).sending, 'Sending…');
   assert.equal(publicCopy(fi).privacyTitle, 'Yhteydenottolomakkeen tietojen käsittely');
   assert.equal(publicCopy(en).privacyTitle, 'How we use your contact details');
+  assert.equal(`${publicCopy(fi).successTitle} ${publicCopy(fi).success}`, 'Kiitos yhteydenotosta! Palaamme sinulle pian.');
 });

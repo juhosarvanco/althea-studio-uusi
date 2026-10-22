@@ -1,8 +1,12 @@
 import { startGalleries } from "../site/gallery.js";
 import { startContactForm } from './contact-form.js';
 import { publicCopy } from './public-copy.js';
+import contactFormStyles from '../site/contact-form.css';
 
 (() => {
+  const confirmationStyles = document.createElement('style');
+  confirmationStyles.textContent = contactFormStyles;
+  document.head.append(confirmationStyles);
   startGalleries();
   const $ = selector => document.querySelector(selector);
   const copy = publicCopy(document);

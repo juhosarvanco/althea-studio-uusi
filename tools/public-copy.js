@@ -6,7 +6,8 @@ const copy = {
     terms: 'Yhteydenottopyynnön lähettäminen ei ole varaus eikä edellytä maksua. Ohjelman varaus- ja peruutusehdot käydään läpi erikseen ennen varauksen vahvistamista.',
     sending: 'Lähetetään…',
     pending: 'Lähetetään yhteydenottopyyntöä…',
-    success: 'Kiitos! Yhteydenottopyyntösi on lähetetty. Vastaamme kahden arkipäivän kuluessa.',
+    successTitle: 'Kiitos yhteydenotosta!',
+    success: 'Palaamme sinulle pian.',
     error: 'Lähetys ei onnistunut. Tietosi ovat tallella lomakkeessa. Yritä uudelleen tai lähetä viesti osoitteeseen info@althea.fi.',
   },
   en: {
@@ -16,7 +17,8 @@ const copy = {
     terms: 'Sending a contact request does not make a booking or require payment. The programme’s booking and cancellation terms will be discussed separately before your booking is confirmed.',
     sending: 'Sending…',
     pending: 'Sending your request…',
-    success: 'Thank you! Your request has been sent. We’ll reply within two working days.',
+    successTitle: 'Thank you for getting in touch!',
+    success: 'We’ll get back to you soon.',
     error: 'Your message could not be sent. Your details are still in the form. Please try again or email info@althea.fi.',
   },
 };

@@ -25,7 +25,7 @@ export function startContactForm(document, request = fetch) {
   let sending = false;
   form.addEventListener('submit', async event => {
     event.preventDefault();
-    if (sending || !form.reportValidity()) return;
+    if (sending || form.dataset.state === 'success' || !form.reportValidity()) return;
     const data = new FormData(form);
     const controls = [...form.querySelectorAll('input, textarea, button')]
       .map(control => [control, control.disabled]);
@@ -38,8 +38,23 @@ export function startContactForm(document, request = fetch) {
     try {
       await sendContactRequest(form.action, data, request);
       form.reset();
+      const panel = form.closest('.contact-panel');
+      const height = panel?.getBoundingClientRect?.().height;
+      if (height) panel.style.minHeight = `${height}px`;
+      if (panel) panel.dataset.contactState = 'success';
+      form.dataset.state = 'success';
+      for (const child of form.children) if (child !== status) child.hidden = true;
+      const icon = document.createElement('span');
+      icon.className = 'contact-success-icon'; icon.setAttribute('aria-hidden', 'true');
+      const title = document.createElement('span');
+      title.className = 'contact-success-title'; title.textContent = copy.successTitle;
+      title.setAttribute('role', 'heading'); title.setAttribute('aria-level', '3');
+      const message = document.createElement('span');
+      message.className = 'contact-success-message'; message.textContent = copy.success;
       status.dataset.state = 'success';
-      status.textContent = copy.success;
+      status.replaceChildren(icon, title, document.createTextNode(' '), message);
+      status.setAttribute('tabindex', '-1');
+      status.focus?.();
     } catch {
       status.dataset.state = 'error';
       status.textContent = copy.error;

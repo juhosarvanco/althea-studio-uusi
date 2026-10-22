@@ -93,7 +93,8 @@
       terms: "Yhteydenottopyynn\xF6n l\xE4hett\xE4minen ei ole varaus eik\xE4 edellyt\xE4 maksua. Ohjelman varaus- ja peruutusehdot k\xE4yd\xE4\xE4n l\xE4pi erikseen ennen varauksen vahvistamista.",
       sending: "L\xE4hetet\xE4\xE4n\u2026",
       pending: "L\xE4hetet\xE4\xE4n yhteydenottopyynt\xF6\xE4\u2026",
-      success: "Kiitos! Yhteydenottopyynt\xF6si on l\xE4hetetty. Vastaamme kahden arkip\xE4iv\xE4n kuluessa.",
+      successTitle: "Kiitos yhteydenotosta!",
+      success: "Palaamme sinulle pian.",
       error: "L\xE4hetys ei onnistunut. Tietosi ovat tallella lomakkeessa. Yrit\xE4 uudelleen tai l\xE4het\xE4 viesti osoitteeseen info@althea.fi."
     },
     en: {
@@ -103,7 +104,8 @@
       terms: "Sending a contact request does not make a booking or require payment. The programme\u2019s booking and cancellation terms will be discussed separately before your booking is confirmed.",
       sending: "Sending\u2026",
       pending: "Sending your request\u2026",
-      success: "Thank you! Your request has been sent. We\u2019ll reply within two working days.",
+      successTitle: "Thank you for getting in touch!",
+      success: "We\u2019ll get back to you soon.",
       error: "Your message could not be sent. Your details are still in the form. Please try again or email info@althea.fi."
     }
   };
@@ -136,7 +138,7 @@
     let sending = false;
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
-      if (sending || !form.reportValidity()) return;
+      if (sending || form.dataset.state === "success" || !form.reportValidity()) return;
       const data = new FormData(form);
       const controls = [...form.querySelectorAll("input, textarea, button")].map((control) => [control, control.disabled]);
       sending = true;
@@ -150,8 +152,27 @@
       try {
         await sendContactRequest(form.action, data, request);
         form.reset();
+        const panel = form.closest(".contact-panel");
+        const height = panel?.getBoundingClientRect?.().height;
+        if (height) panel.style.minHeight = `${height}px`;
+        if (panel) panel.dataset.contactState = "success";
+        form.dataset.state = "success";
+        for (const child of form.children) if (child !== status) child.hidden = true;
+        const icon = document2.createElement("span");
+        icon.className = "contact-success-icon";
+        icon.setAttribute("aria-hidden", "true");
+        const title = document2.createElement("span");
+        title.className = "contact-success-title";
+        title.textContent = copy2.successTitle;
+        title.setAttribute("role", "heading");
+        title.setAttribute("aria-level", "3");
+        const message = document2.createElement("span");
+        message.className = "contact-success-message";
+        message.textContent = copy2.success;
         status.dataset.state = "success";
-        status.textContent = copy2.success;
+        status.replaceChildren(icon, title, document2.createTextNode(" "), message);
+        status.setAttribute("tabindex", "-1");
+        status.focus?.();
       } catch {
         status.dataset.state = "error";
         status.textContent = copy2.error;
@@ -166,8 +187,14 @@
     });
   }
 
+  // site/contact-form.css
+  var contact_form_default = '.contact-panel[data-contact-state="success"] {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n}\n.contact-panel[data-contact-state="success"] > h3 { display: none; }\n#contact-form[data-state="success"] { width: 100%; }\n#contact-status[data-state="success"] {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: 16px;\n  margin: 0;\n  padding: 32px 0;\n  color: var(--ink);\n  font-size: 18px;\n  line-height: 1.7;\n  text-align: center;\n  outline: none;\n}\n.contact-success-icon {\n  display: grid;\n  place-items: center;\n  width: 60px;\n  height: 60px;\n  margin-bottom: 6px;\n  border-radius: 50%;\n  background: var(--sage);\n  color: var(--accent);\n}\n.contact-success-icon::after {\n  content: "";\n  width: 11px;\n  height: 22px;\n  border: solid currentColor;\n  border-width: 0 2px 2px 0;\n  transform: translateY(-3px) rotate(45deg);\n}\n.contact-success-title {\n  font-family: Lora, Georgia, serif;\n  font-size: clamp(24px, 2.5vw, 28px);\n  line-height: 1.3;\n  text-wrap: balance;\n}\n.contact-success-message { color: var(--body); }\n';
+
   // tools/public-app.js
   (() => {
+    const confirmationStyles = document.createElement("style");
+    confirmationStyles.textContent = contact_form_default;
+    document.head.append(confirmationStyles);
     startGalleries();
     const $ = (selector) => document.querySelector(selector);
     const copy2 = publicCopy(document);

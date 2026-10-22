@@ -1,0 +1,45 @@
+.contact-panel[data-contact-state="success"] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.contact-panel[data-contact-state="success"] > h3 { display: none; }
+#contact-form[data-state="success"] { width: 100%; }
+#contact-status[data-state="success"] {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  margin: 0;
+  padding: 32px 0;
+  color: var(--ink);
+  font-size: 18px;
+  line-height: 1.7;
+  text-align: center;
+  outline: none;
+}
+.contact-success-icon {
+  display: grid;
+  place-items: center;
+  width: 60px;
+  height: 60px;
+  margin-bottom: 6px;
+  border-radius: 50%;
+  background: var(--sage);
+  color: var(--accent);
+}
+.contact-success-icon::after {
+  content: "";
+  width: 11px;
+  height: 22px;
+  border: solid currentColor;
+  border-width: 0 2px 2px 0;
+  transform: translateY(-3px) rotate(45deg);
+}
+.contact-success-title {
+  font-family: Lora, Georgia, serif;
+  font-size: clamp(24px, 2.5vw, 28px);
+  line-height: 1.3;
+  text-wrap: balance;
+}
+.contact-success-message { color: var(--body); }
