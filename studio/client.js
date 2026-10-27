@@ -50,7 +50,8 @@ const status = () => {
 async function api(path, body) {
   const response = await fetch(session.server + contentPath(path), { method: body ? 'POST' : 'GET',
     headers: { authorization: `Bearer ${session.token}`, ...(body ? { 'content-type': 'application/json' } : {}) },
-    ...(body ? { body: JSON.stringify(body) } : {}), signal: AbortSignal.timeout(15000) });
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    signal: AbortSignal.timeout(path === '/api/studio-publish' ? 120000 : 15000) });
   const result = await response.json();
   if (!response.ok) throw new Error(result.error || 'Toiminto epäonnistui.');
   return result;
