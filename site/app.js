@@ -259,13 +259,14 @@
     api("inline", {
       elementOrSelector: "#althea-booking-calendar",
       calLink: bookingLinks[language],
-      config: { layout: "month_view", useSlotsViewOnSmallScreen: "true", theme: "light" }
+      config: { layout: "month_view", useSlotsViewOnSmallScreen: "false", theme: "light" }
     });
     api("ui", {
       theme: "light",
       cssVarsPerTheme: { light: { "cal-brand": "#0d1f29" } },
       hideEventTypeDetails: true,
       showTimezoneWhenEventDetailsHidden: false,
+      useSlotsViewOnSmallScreen: false,
       layout: "month_view"
     });
   }

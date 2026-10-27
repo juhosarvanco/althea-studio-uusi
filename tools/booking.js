@@ -36,8 +36,11 @@ export function startBooking(document, window = document.defaultView) {
   const api = Cal.ns[namespace];
   api('on', { action: 'linkReady', callback: () => { if (status) status.hidden = true; } });
   api('on', { action: 'linkFailed', callback: fail });
+  // The compact slot-selection screen always renders its own timezone row.
+  // Keep the standard time list so hidden event details also hide that control.
   api('inline', { elementOrSelector: '#althea-booking-calendar', calLink: bookingLinks[language],
-    config: { layout: 'month_view', useSlotsViewOnSmallScreen: 'true', theme: 'light' } });
+    config: { layout: 'month_view', useSlotsViewOnSmallScreen: 'false', theme: 'light' } });
   api('ui', { theme: 'light', cssVarsPerTheme: { light: { 'cal-brand': '#0d1f29' } },
-    hideEventTypeDetails: true, showTimezoneWhenEventDetailsHidden: false, layout: 'month_view' });
+    hideEventTypeDetails: true, showTimezoneWhenEventDetailsHidden: false,
+    useSlotsViewOnSmallScreen: false, layout: 'month_view' });
 }
