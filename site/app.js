@@ -265,7 +265,7 @@
       theme: "light",
       cssVarsPerTheme: { light: { "cal-brand": "#0d1f29" } },
       hideEventTypeDetails: true,
-      showTimezoneWhenEventDetailsHidden: true,
+      showTimezoneWhenEventDetailsHidden: false,
       layout: "month_view"
     });
   }
