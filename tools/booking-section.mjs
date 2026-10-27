@@ -52,3 +52,40 @@ export function addBookingSection(html, styles) {
   const style = document.createElement('style'); style.id = 'althea-booking-styles'; style.textContent = styles; document.head.append(style);
   return '<!doctype html>\n' + document.documentElement.outerHTML;
 }
+
+// Apply the contact-section review without replacing any form fields or history.
+export function refineBookingContact(html, styles) {
+  const { document } = parseHTML(html);
+  const en = document.documentElement.lang.startsWith('en');
+  const contact = document.querySelector('#yhteys .booking-contact');
+  if (!contact) throw new Error('Missing booking contact section');
+  document.querySelector('.booking-fallback')?.setAttribute('hidden', '');
+  document.querySelector('.booking-footnote')?.setAttribute('hidden', '');
+  const chat = contact.querySelector('.whatsapp-card');
+  chat.querySelector('p')?.remove();
+  if (!document.querySelector('#contact-email-dialog')) {
+    const old = contact.querySelector('.contact-email-option');
+    const panel = old?.querySelector('.contact-panel');
+    if (!panel) throw new Error('Missing email form');
+    const dialog = document.createElement('dialog');
+    dialog.id = 'contact-email-dialog'; dialog.className = 'contact-email-dialog';
+    dialog.setAttribute('aria-labelledby', 'contact-email-title');
+    const heading = panel.querySelector('h3'); heading.id = 'contact-email-title';
+    const close = document.createElement('button'); close.type = 'button';
+    close.className = 'contact-email-close'; close.setAttribute('data-close-contact-email', '');
+    close.setAttribute('data-studio-ignore', '');
+    close.setAttribute('aria-label', en ? 'Close email form' : 'Sulje sähköpostilomake'); close.textContent = '×';
+    dialog.append(close, panel);
+    const reply = old.querySelector('.contact-list'); if (reply) dialog.append(reply);
+    old.remove(); contact.append(dialog);
+    const links = document.createElement('div'); links.className = 'contact-channel-links';
+    const whatsapp = chat.querySelector('.whatsapp-link');
+    const email = document.createElement('a'); email.className = 'contact-email-link';
+    email.href = 'mailto:info@althea.fi'; email.setAttribute('data-open-contact-email', '');
+    email.setAttribute('aria-haspopup', 'dialog'); email.setAttribute('aria-controls', dialog.id);
+    email.textContent = en ? 'Send an email' : 'Kirjoita sähköposti';
+    whatsapp.parentElement.append(links); links.append(whatsapp, email);
+  }
+  document.querySelector('#althea-booking-styles').textContent = styles;
+  return '<!doctype html>\n' + document.documentElement.outerHTML;
+}

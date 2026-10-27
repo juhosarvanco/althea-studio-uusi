@@ -3,6 +3,7 @@
 import { sitePath } from './config.js';
 import { rewriteAssets } from '../shared/site-assets.mjs';
 import { startGalleries } from '../site/gallery.js';
+import { startEmailDialog } from '../tools/email-dialog.js';
 
 export function reconcileLayout(layout, editors, prepareImages = () => {}) {
   const incoming = new DOMParser().parseFromString(layout.html, 'text/html');
@@ -78,6 +79,7 @@ export function reconcileLayout(layout, editors, prepareImages = () => {}) {
 // Studio owns page interactions so they always query the current live layout.
 // The public page retains its original standalone background implementation.
 export function startPageBehavior() {
+  startEmailDialog(document);
   const refreshGalleries = startGalleries();
   let observer, frame, measured = false;
   const measure = (force = false) => {

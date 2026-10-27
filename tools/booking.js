@@ -10,8 +10,8 @@ export function startBooking(document, window = document.defaultView) {
   const language = document.documentElement.lang?.startsWith('en') ? 'en' : 'fi';
   const status = document.querySelector('[data-booking-status]');
   const fail = () => { if (status) { status.hidden = false; status.textContent = language === 'en'
-    ? 'Please use the booking link below if the calendar does not load.'
-    : 'Jos kalenteri ei lataudu, käytä alla olevaa varauslinkkiä.'; } };
+    ? 'The calendar could not load. Please contact us on WhatsApp or by email.'
+    : 'Kalenteri ei latautunut. Voit ottaa yhteyttä WhatsAppilla tai sähköpostilla.'; } };
   // Cal.com's official queue loader. Disable forwarding of visitor URL parameters.
   if (!window.Cal) {
     window.Cal = function () {

@@ -4,6 +4,7 @@ import { publicCopy } from './public-copy.js';
 import contactFormStyles from '../site/contact-form.css';
 import { applySiteIcons } from '../shared/site-icons.mjs';
 import { startBooking } from './booking.js';
+import { startEmailDialog } from './email-dialog.js';
 
 (() => {
   const appURL = document.currentScript?.src || document.querySelector('script[src$="app.js"]')?.src || document.baseURI;
@@ -26,6 +27,7 @@ import { startBooking } from './booking.js';
   policy.querySelector('[data-close-dialog]').addEventListener('click', () => policy.close());
 
   startContactForm(document);
+  startEmailDialog(document);
   startBooking(document);
 
   const menu = $('.mobile-menu');

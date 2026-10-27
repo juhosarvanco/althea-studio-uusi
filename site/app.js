@@ -219,7 +219,7 @@
     const fail = () => {
       if (status) {
         status.hidden = false;
-        status.textContent = language === "en" ? "Please use the booking link below if the calendar does not load." : "Jos kalenteri ei lataudu, k\xE4yt\xE4 alla olevaa varauslinkki\xE4.";
+        status.textContent = language === "en" ? "The calendar could not load. Please contact us on WhatsApp or by email." : "Kalenteri ei latautunut. Voit ottaa yhteytt\xE4 WhatsAppilla tai s\xE4hk\xF6postilla.";
       }
     };
     if (!window2.Cal) {
@@ -270,6 +270,35 @@
     });
   }
 
+  // tools/email-dialog.js
+  var started = /* @__PURE__ */ new WeakSet();
+  function startEmailDialog(document2) {
+    if (started.has(document2)) return;
+    started.add(document2);
+    let trigger;
+    document2.addEventListener("click", (event) => {
+      const opener = event.target.closest("[data-open-contact-email]");
+      const dialog = document2.querySelector("#contact-email-dialog");
+      if (!dialog) return;
+      if (opener && typeof dialog.showModal === "function") {
+        event.preventDefault();
+        trigger = opener;
+        if (!dialog.open) dialog.showModal();
+        document2.documentElement.classList.add("contact-email-open");
+      } else if (event.target.closest("[data-close-contact-email]")) {
+        dialog.close();
+      } else if (event.target === dialog) {
+        const r = dialog.getBoundingClientRect();
+        if (event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom) dialog.close();
+      }
+    });
+    document2.addEventListener("close", (event) => {
+      if (event.target.id !== "contact-email-dialog") return;
+      document2.documentElement.classList.remove("contact-email-open");
+      if (trigger?.isConnected) trigger.focus({ preventScroll: true });
+    }, true);
+  }
+
   // tools/public-app.js
   (() => {
     const appURL = document.currentScript?.src || document.querySelector('script[src$="app.js"]')?.src || document.baseURI;
@@ -290,6 +319,7 @@
     });
     policy.querySelector("[data-close-dialog]").addEventListener("click", () => policy.close());
     startContactForm(document);
+    startEmailDialog(document);
     startBooking(document);
     const menu = $(".mobile-menu");
     menu.addEventListener("click", (event) => {
