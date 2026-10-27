@@ -88,9 +88,9 @@
   var copy = {
     fi: {
       privacyTitle: "Yhteydenottolomakkeen tietojen k\xE4sittely",
-      privacy: "Lomakkeella antamasi nimi, s\xE4hk\xF6postiosoite ja viesti v\xE4litet\xE4\xE4n FormSubmit-palvelun kautta osoitteeseen info@althea.fi. K\xE4yt\xE4mme tietoja yhteydenottoosi vastaamiseen ja tutustumiskeskustelun sopimiseen. FormSubmit s\xE4ilytt\xE4\xE4 lomakeviestit palvelussaan 30 p\xE4iv\xE4\xE4. \xC4l\xE4 l\xE4het\xE4 lomakkeella terveystietoja tai muita arkaluonteisia tietoja. Voit kysy\xE4 tietojesi k\xE4sittelyst\xE4 tai pyyt\xE4\xE4 niiden poistamista osoitteesta info@althea.fi.",
+      privacy: "K\xE4yt\xE4mme yhteystietojasi yhteydenottoosi vastaamiseen ja tutustumiskeskustelun j\xE4rjest\xE4miseen. Ajanvarauksessa nimi, puhelinnumero, mahdollinen s\xE4hk\xF6postiosoite ja valittu aika k\xE4sitell\xE4\xE4n Cal.com-palvelussa. Varaus tallentuu yksityiseen Althea-kalenteriin iCloudissa. Ajanvarauskalenteri k\xE4ytt\xE4\xE4 Cal.comin palvelua ja sen tietosuojak\xE4yt\xE4nt\xF6\xE4. WhatsApp-linkki avaa WhatsAppin; viesti l\xE4hetet\xE4\xE4n vasta, kun l\xE4het\xE4t sen itse. WhatsApp k\xE4sittelee tietoja omien ehtojensa mukaisesti. S\xE4hk\xF6postilomakkeen nimi, s\xE4hk\xF6postiosoite ja viesti v\xE4litet\xE4\xE4n FormSubmit-palvelun kautta osoitteeseen info@althea.fi. FormSubmit s\xE4ilytt\xE4\xE4 lomakeviestit palvelussaan 30 p\xE4iv\xE4\xE4. \xC4l\xE4 l\xE4het\xE4 n\xE4iden kanavien kautta terveystietoja tai muita arkaluonteisia tietoja. Voit kysy\xE4 tietojesi k\xE4sittelyst\xE4 tai pyyt\xE4\xE4 niiden poistamista osoitteesta info@althea.fi.",
       termsTitle: "Varaus- ja peruutusehdot",
-      terms: "Yhteydenottopyynn\xF6n l\xE4hett\xE4minen ei ole varaus eik\xE4 edellyt\xE4 maksua. Ohjelman varaus- ja peruutusehdot k\xE4yd\xE4\xE4n l\xE4pi erikseen ennen varauksen vahvistamista.",
+      terms: "Tutustumiskeskustelu on maksuton eik\xE4 sido osallistumaan ohjelmaan. Kalenterista varaamasi aika on varaus tutustumiskeskusteluun. Voit siirt\xE4\xE4 tai peruuttaa ajan varausvahvistuksen linkist\xE4 tai ottamalla yhteytt\xE4 osoitteeseen info@althea.fi. S\xE4hk\xF6posti- tai WhatsApp-viestin l\xE4hett\xE4minen ei varaa aikaa automaattisesti. Ohjelman varaus- ja peruutusehdot k\xE4yd\xE4\xE4n l\xE4pi erikseen ennen ohjelmavarauksen vahvistamista.",
       sending: "L\xE4hetet\xE4\xE4n\u2026",
       pending: "L\xE4hetet\xE4\xE4n yhteydenottopyynt\xF6\xE4\u2026",
       successTitle: "Kiitos yhteydenotosta!",
@@ -99,9 +99,9 @@
     },
     en: {
       privacyTitle: "How we use your contact details",
-      privacy: "The name, email address and message you enter in this form are forwarded via FormSubmit to info@althea.fi. We use these details to reply to your enquiry and arrange an introductory call. FormSubmit retains form submissions on its servers for 30 days. Please do not send health information or other sensitive information through this form. You can ask about how we handle your details or request their deletion by emailing info@althea.fi.",
+      privacy: "We use your contact details to reply to your enquiry and arrange your introductory call. When you book, your name, phone number, optional email address and chosen time are processed by Cal.com. The booking is added to the private Althea calendar in iCloud. The booking calendar uses Cal.com and its privacy policy. The WhatsApp link opens WhatsApp; a message is sent only when you send it yourself. WhatsApp processes information under its own terms. The name, email address and message entered in the email form are forwarded via FormSubmit to info@althea.fi. FormSubmit retains form submissions on its servers for 30 days. Please do not send health information or other sensitive details through these channels. You can ask about how we handle your details or request their deletion by emailing info@althea.fi.",
       termsTitle: "Booking and cancellation terms",
-      terms: "Sending a contact request does not make a booking or require payment. The programme\u2019s booking and cancellation terms will be discussed separately before your booking is confirmed.",
+      terms: "The introductory call is free and does not commit you to joining the programme. Selecting and confirming a time in the calendar books an introductory call. You can reschedule or cancel using the link in your booking confirmation or by contacting info@althea.fi. Sending an email or WhatsApp message does not automatically reserve a time. The programme\u2019s booking and cancellation terms will be discussed separately before a programme booking is confirmed.",
       sending: "Sending\u2026",
       pending: "Sending your request\u2026",
       successTitle: "Thank you for getting in touch!",
@@ -206,6 +206,70 @@
     }
   }
 
+  // tools/booking.js
+  var bookingLinks = Object.freeze({
+    fi: "team-althea-zulfrv/tutustumiskeskustelu",
+    en: "team-althea-zulfrv/introductory-call"
+  });
+  function startBooking(document2, window2 = document2.defaultView) {
+    const container = document2.querySelector("[data-booking-calendar]");
+    if (!container || document2.documentElement.hasAttribute("data-studio-language")) return;
+    const language = document2.documentElement.lang?.startsWith("en") ? "en" : "fi";
+    const status = document2.querySelector("[data-booking-status]");
+    const fail = () => {
+      if (status) {
+        status.hidden = false;
+        status.textContent = language === "en" ? "Please use the booking link below if the calendar does not load." : "Jos kalenteri ei lataudu, k\xE4yt\xE4 alla olevaa varauslinkki\xE4.";
+      }
+    };
+    if (!window2.Cal) {
+      window2.Cal = function() {
+        const cal = window2.Cal, args = arguments;
+        if (!cal.loaded) {
+          cal.ns = {};
+          cal.q = [];
+          const script = document2.createElement("script");
+          script.src = "https://app.cal.com/embed/embed.js";
+          script.onerror = fail;
+          document2.head.append(script);
+          cal.loaded = true;
+        }
+        if (args[0] === "init") {
+          const namespace2 = args[1], api2 = function() {
+            api2.q.push(arguments);
+          };
+          api2.q = [];
+          cal.ns[namespace2] = cal.ns[namespace2] || api2;
+          cal.ns[namespace2].q.push(args);
+          cal.q.push(["initNamespace", namespace2]);
+          return;
+        }
+        cal.q.push(args);
+      };
+    }
+    const Cal = window2.Cal, namespace = `althea-${language}`;
+    Cal("init", namespace, { origin: "https://app.cal.com" });
+    Cal.config = Cal.config || {};
+    Cal.config.forwardQueryParams = false;
+    const api = Cal.ns[namespace];
+    api("on", { action: "linkReady", callback: () => {
+      if (status) status.hidden = true;
+    } });
+    api("on", { action: "linkFailed", callback: fail });
+    api("inline", {
+      elementOrSelector: "#althea-booking-calendar",
+      calLink: bookingLinks[language],
+      config: { layout: "month_view", useSlotsViewOnSmallScreen: "true", theme: "light" }
+    });
+    api("ui", {
+      theme: "light",
+      cssVarsPerTheme: { light: { "cal-brand": "#0d1f29" } },
+      hideEventTypeDetails: true,
+      showTimezoneWhenEventDetailsHidden: true,
+      layout: "month_view"
+    });
+  }
+
   // tools/public-app.js
   (() => {
     const appURL = document.currentScript?.src || document.querySelector('script[src$="app.js"]')?.src || document.baseURI;
@@ -226,6 +290,7 @@
     });
     policy.querySelector("[data-close-dialog]").addEventListener("click", () => policy.close());
     startContactForm(document);
+    startBooking(document);
     const menu = $(".mobile-menu");
     menu.addEventListener("click", (event) => {
       if (event.target.closest("a")) menu.open = false;

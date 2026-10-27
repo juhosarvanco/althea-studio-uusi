@@ -3,6 +3,7 @@ import { startContactForm } from './contact-form.js';
 import { publicCopy } from './public-copy.js';
 import contactFormStyles from '../site/contact-form.css';
 import { applySiteIcons } from '../shared/site-icons.mjs';
+import { startBooking } from './booking.js';
 
 (() => {
   const appURL = document.currentScript?.src || document.querySelector('script[src$="app.js"]')?.src || document.baseURI;
@@ -25,6 +26,7 @@ import { applySiteIcons } from '../shared/site-icons.mjs';
   policy.querySelector('[data-close-dialog]').addEventListener('click', () => policy.close());
 
   startContactForm(document);
+  startBooking(document);
 
   const menu = $('.mobile-menu');
   menu.addEventListener('click', event => { if (event.target.closest('a')) menu.open = false; });
