@@ -19,7 +19,7 @@ export function startEmailDialog(document) {
       const r = dialog.getBoundingClientRect();
       if (event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom) dialog.close();
     }
-  });
+  }, true);
   document.addEventListener('close', event => {
     if (event.target.id !== 'contact-email-dialog') return;
     document.documentElement.classList.remove('contact-email-open');
