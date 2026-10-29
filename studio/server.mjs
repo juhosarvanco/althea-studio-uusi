@@ -1,3 +1,4 @@
+import {LanguageRegistry} from './languages.mjs';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { dirname, join, extname, resolve } from 'node:path';
@@ -34,18 +35,17 @@ export async function createStudioServer(options = {}) {
   // Finnish keeps its original directory so existing drafts and sessions survive.
   const contexts = new Map();
   const directory = options.dataDir || process.env.STUDIO_DATA_DIR || join(root, '.studio-data');
-  try {
-    for (const language of ['fi', 'en']) {
+  const registry=new LanguageRegistry(directory);let languageCreation=false;
+  async function openContext(language,bootstrap=null){
+    let context;try{
       const editor = language === 'en' ? 'site/en/studio' : 'site/studio';
-      const manifest = JSON.parse(await readFile(join(root, editor, 'manifest.json')));
-      const store = new StudioStore(language === 'en' ? join(directory, 'en') : directory,
-        manifest, await readFile(join(root, editor, 'template.html'), 'utf8'));
-      const context = { language, store, connections: new Map(), layoutSubscribers: new Set(), mediaSubscribers: new Set() };
-      contexts.set(language, context);
+      const manifest=bootstrap?.manifest||JSON.parse(await readFile(join(root,editor,'manifest.json')));
+      const store=new StudioStore(language==='fi'?directory:join(directory,language),manifest,bootstrap?.template||await readFile(join(root,editor,'template.html'),'utf8'));
+      context = { language, store, connections: new Map(), layoutSubscribers: new Set(), mediaSubscribers: new Set() };
       enableHeaderEditing(store);
       context.media = new MediaLibrary(store.directory, join(root, 'site'), store.template);
       context.publisher = options.publishers?.[language] || (language === 'fi' && options.publisher)
-        || new GithubPublisher({ store, media: context.media, site: join(root, 'site'), language });
+        || new GithubPublisher({store,media:context.media,site:join(root,'site'),language,canCreate:()=>registry.canCreate(language),onPublished:()=>registry.published(language)});
       context.online = new awareness.Awareness(store.doc); context.online.setLocalState(null);
       context.broadcast = bytes => { for (const socket of context.connections.keys()) if (socket.readyState === 1) socket.send(bytes); };
       context.ack = () => packet(4, new TextEncoder().encode(vector(store.doc)));
@@ -56,11 +56,12 @@ export async function createStudioServer(options = {}) {
       });
       store.on('layout', () => { const notice = context.layoutNotice(); for (const socket of context.layoutSubscribers) if (socket.readyState === 1) socket.send(notice); });
       context.online.on('update', ({ added, updated, removed }) => context.broadcast(packet(1, awareness.encodeAwarenessUpdate(context.online, [...added, ...updated, ...removed]))));
-    }
-  } catch (error) {
-    for (const { store, online } of contexts.values()) { online?.destroy(); store.close(); }
-    throw error;
+
+      contexts.set(language,context);return context;
+    }catch(error){context?.online?.destroy();context?.store.close();throw error;}
   }
+  try{for(const item of registry.list())await openContext(item.code,registry.bootstrap(item.code));}
+  catch(error){for(const {store,online} of contexts.values()){online?.destroy();store.close();}throw error;}
   const { store, media } = contexts.get('fi');
   const login = options.login || new GithubLogin({ clientId: process.env.GITHUB_CLIENT_ID || '', allowed,
     ...(!development ? { directory: store.directory, secret } : {}) });
@@ -126,9 +127,10 @@ export async function createStudioServer(options = {}) {
         return response(req, res, 200, { user, token: issueStudioToken(user, secret), server: `http://${req.headers.host}`, development: true });
       }
       if (url.pathname.startsWith('/api/')) {
-        const context = contexts.get(url.pathname.startsWith('/api/en/') ? 'en' : 'fi');
+        const requestedLanguage=url.pathname.match(/^\/api\/([a-z]{2})\//)?.[1]||'fi';
+        const context=contexts.get(requestedLanguage);if(!context)return response(req,res,404,{error:'Kieliversiota ei löydy.'});
         const { store, media, publisher, mediaSubscribers } = context;
-        const path = url.pathname.replace(/^\/api\/en\//, '/api/');
+        const path=url.pathname.replace(/^\/api\/[a-z]{2}\//,'/api/');
         const localLayout = path === '/api/local-layout';
         let user;
         if (localLayout) {
@@ -151,6 +153,15 @@ export async function createStudioServer(options = {}) {
           if (development) return response(req, res, 403, { error: 'Local testing cannot publish.' });
           if (!acceptedOrigins.has(req.headers.origin)) return response(req, res, 403, { error: 'Origin not allowed' });
           return response(req, res, 200, await publisher.publish(await readBody(req), user));
+        }
+        if(req.method==='GET'&&path==='/api/languages')return response(req,res,200,{languages:registry.list()});
+        if(req.method==='POST'&&path==='/api/add-language'){
+          if(languageCreation)return response(req,res,409,{error:'Kieliversion luonti on jo käynnissä.'});
+          const body=await readBody(req);if(body.vector!==vector(store.doc))return response(req,res,409,{error:'Sisältö muuttui. Odota tallennusta ja yritä uudelleen.'});
+          languageCreation=true;let created,prepared=false;
+          try{const bootstrap=registry.prepare(body.code,context);prepared=true;created=await openContext(body.code,bootstrap);registry.commit(body.code,context.language,user);return response(req,res,200,{languages:registry.list(),language:body.code});}
+          catch(error){if(created){created.online.destroy();created.store.close();contexts.delete(body.code);}if(prepared)registry.rollback(body.code);throw error;}
+          finally{languageCreation=false;}
         }
         if (req.method === 'GET' && path === '/api/media') return response(req, res, 200, mediaView(media, store.layout));
         if (req.method === 'GET' && path.startsWith('/api/media-file/'))
@@ -217,8 +228,8 @@ export async function createStudioServer(options = {}) {
   http.on('upgrade', (req, socket, head) => {
     try {
       const url = new URL(req.url, 'http://localhost');
-      const language = url.pathname === '/sync/althea-uusi' ? 'fi' : url.pathname === '/sync/althea-uusi-en' ? 'en' : null;
-      if (!language || !acceptedOrigins.has(req.headers.origin)) throw new Error('Origin not allowed');
+      const language=url.pathname==='/sync/althea-uusi'?'fi':url.pathname.match(/^\/sync\/althea-uusi-([a-z]{2})$/)?.[1];
+      if (!language || !contexts.has(language) || !acceptedOrigins.has(req.headers.origin)) throw new Error('Origin not allowed');
       const context = contexts.get(language);
       const protocol = (req.headers['sec-websocket-protocol'] || '').split(',').map(value => value.trim()).find(value => value.startsWith('althea-auth.'));
       const user = verifyStudioToken(protocol?.slice(12), secret, development ? ['juho', 'julia'] : allowed);

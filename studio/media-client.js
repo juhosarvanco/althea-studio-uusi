@@ -141,69 +141,44 @@ export function createMediaMode({ api, getSession, getHeading, container, toast,
         last = result.entry; count++;
       }
       await refresh();
-      if (draft && last) draft.mediaId = last.id;
-      toast(`${count === 1 ? 'Kuva lisätty' : `${count} kuvaa lisätty`} yhteiseen kuvapankkiin. Valitse alue ja paina Käytä tässä kohdassa.`);
+      toast(`${count === 1 ? 'Kuva lisätty' : `${count} kuvaa lisätty`} yhteiseen kuvapankkiin. Valitse kuva kirjastosta käyttääksesi sitä.`);
     } catch (error) { toast(error.message + (count ? ` ${count} kuvaa tallennettiin kuvapankkiin.` : '')); await refresh().catch(() => {}); }
     finally { busy = false; if (enabled) render(); }
   }
   function render() {
-    if (!enabled) return;
-    const fragment = document.createDocumentFragment();
-    fragment.append(el('p', 'Valitse kuva sivulta tai alla olevasta listasta. Valitse sitten uusi kuva yhteisestä kuvapankista.', 'studio-media-intro'));
-    const slotLabel = el('label', 'Muokattava kuva', 'studio-media-label'), select = el('select'); select.setAttribute('aria-label', 'Muokattava kuva'); select.disabled = busy;
-    for (const [kind, title] of [['background', 'Taustakuvat'], ['image', 'Muut kuvat']]) {
-      const group = el('optgroup'); group.label = title;
-      for (const slot of slots.filter(item => item.kind === kind)) { const option = el('option', label(slot)); option.value = slot.id; option.selected = slot.id === selected; group.append(option); }
-      if (group.children.length) select.append(group);
+    if(!enabled)return;const fragment=document.createDocumentFragment();
+    if(!showDeleted){
+      const uploadLabel=el('label',busy?'Lisätään kuvia…':'Lataa kuvia','studio-media-upload'),input=el('input');
+      input.type='file';input.multiple=true;input.accept='image/jpeg,image/png,image/webp,image/avif';input.disabled=busy;input.setAttribute('aria-label','Lataa kuvia kuvakirjastoon');input.onchange=()=>upload([...input.files]);
+      uploadLabel.append(el('small','JPG, PNG, WebP tai AVIF · enintään 20 Mt'),input);fragment.append(uploadLabel);
     }
-    select.onchange = () => choose(select.value); slotLabel.append(select); fragment.append(slotLabel);
-    const slot = current(), chosen = images.find(image => image.id === draft?.mediaId);
-    if (slot && draft) {
-      if (slot.imageHash !== draft.imageHash) {
-        const warning = el('div', undefined, 'studio-media-conflict'); warning.setAttribute('role', 'status');
-        warning.append(el('p', 'Tätä kuvaa muutettiin toisessa näkymässä. Tarkista uusin kuva ennen omaa muutostasi.'), button('Lataa uusin kuva', () => choose(selected, false)));
-        fragment.append(warning);
-      }
-      if (chosen) {
-        const preview = el('img', undefined, 'studio-media-preview'); preview.style.objectPosition = draft.position; loadPreview(preview, chosen); fragment.append(preview);
-      }
-      const altLabel = el('label', 'Kuvan kuvaus', 'studio-media-label'), alt = el('input'); alt.type = 'text'; alt.maxLength = 500; alt.value = draft.alt; alt.disabled = busy;
-      alt.setAttribute('aria-label', 'Kuvan kuvaus'); alt.oninput = () => { draft.alt = alt.value; }; altLabel.append(alt);
-      const cropLabel = el('label', 'Rajauksen painopiste', 'studio-media-label'), crop = el('select'); crop.setAttribute('aria-label', 'Rajauksen painopiste'); crop.disabled = busy;
-      const positions = [['50% 50%', 'Keskellä'], ['50% 20%', 'Ylhäällä'], ['50% 80%', 'Alhaalla'], ['20% 50%', 'Vasemmalla'], ['80% 50%', 'Oikealla']];
-      if (!positions.some(([value]) => value === draft.position)) positions.unshift([draft.position, 'Nykyinen rajaus']);
-      for (const [value, name] of positions) { const option = el('option', name); option.value = value; option.selected = value === draft.position; crop.append(option); }
-      crop.onchange = () => { draft.position = crop.value; const preview = container.querySelector('.studio-media-preview'); if (preview) preview.style.objectPosition = draft.position; };
-      cropLabel.append(crop); fragment.append(altLabel, cropLabel);
-      const apply = button(busy ? 'Odota…' : 'Käytä tässä kohdassa', save, 'studio-primary'); apply.disabled = busy || !chosen || !isConnected() || slot.imageHash !== draft.imageHash;
-      fragment.append(apply, el('p', 'Kuvan vaihto näkyy molemmille heti. Julkinen sivu päivittyy Julkaise-painikkeella.', 'studio-history-note studio-media-note'));
+    const slotLabel=el('label','SIVUN KUVAKOHDAT','studio-media-label'),select=el('select');select.setAttribute('aria-label','Muokattava kuva');select.disabled=busy;
+    for(const [kind,title] of [['background','Taustakuvat'],['image','Muut kuvat']]){const group=el('optgroup');group.label=title;for(const slot of slots.filter(item=>item.kind===kind)){const option=el('option',label(slot));option.value=slot.id;option.selected=slot.id===selected;group.append(option);}if(group.children.length)select.append(group);}
+    select.onchange=()=>choose(select.value);slotLabel.append(select);fragment.append(slotLabel);
+    const slot=current(),chosen=images.find(image=>image.id===draft?.mediaId);
+    if(slot&&draft){
+      if(slot.imageHash!==draft.imageHash){const warning=el('div',undefined,'studio-media-conflict');warning.setAttribute('role','status');warning.append(el('p','Tätä kuvaa muutettiin toisessa näkymässä.'),button('Lataa uusin kuva',()=>choose(selected,false)));fragment.append(warning);}
+      const settings=el('details',undefined,'studio-media-settings');settings.append(el('summary','Kuvan asetukset'));
+      const altLabel=el('label','Kuvan kuvaus','studio-media-label'),alt=el('input');alt.type='text';alt.maxLength=500;alt.value=draft.alt;alt.disabled=busy;alt.setAttribute('aria-label','Kuvan kuvaus');alt.oninput=()=>draft.alt=alt.value;altLabel.append(alt);
+      const cropLabel=el('label','Rajauksen painopiste','studio-media-label'),crop=el('select');crop.setAttribute('aria-label','Rajauksen painopiste');crop.disabled=busy;
+      const positions=[['50% 50%','Keskellä'],['50% 20%','Ylhäällä'],['50% 80%','Alhaalla'],['20% 50%','Vasemmalla'],['80% 50%','Oikealla']];if(!positions.some(([value])=>value===draft.position))positions.unshift([draft.position,'Nykyinen rajaus']);
+      for(const [value,name] of positions){const option=el('option',name);option.value=value;option.selected=value===draft.position;crop.append(option);}crop.onchange=()=>draft.position=crop.value;cropLabel.append(crop);
+      const apply=button(busy?'Odota…':'Tallenna kuvan asetukset',save,'studio-primary');apply.disabled=busy||!chosen||!isConnected()||slot.imageHash!==draft.imageHash;settings.append(altLabel,cropLabel,apply);fragment.append(settings);
     }
-    const heading = el('div', undefined, 'studio-media-heading'); heading.append(el('h3', showDeleted ? `Poistetut kuvat (${deletedImages.length})` : `Kuvapankki (${images.length})`)); fragment.append(heading);
-    const toggle = button(showDeleted ? 'Takaisin kuvapankkiin' : `Poistetut kuvat (${deletedImages.length})`, () => { showDeleted = !showDeleted; render(); });
-    toggle.disabled = busy; fragment.append(toggle);
-    if (!showDeleted) {
-      const uploadLabel = el('label', busy ? 'Lisätään kuvia…' : '+ Lisää kuvia', 'studio-media-upload');
-      const input = el('input'); input.type = 'file'; input.multiple = true; input.accept = 'image/jpeg,image/png,image/webp,image/avif'; input.disabled = busy; input.setAttribute('aria-label', 'Lisää kuvia kuvapankkiin');
-      input.onchange = () => upload([...input.files]); uploadLabel.append(input); fragment.append(uploadLabel);
-      fragment.append(el('p', 'JPG, PNG, WebP tai AVIF · enintään 20 Mt / alkuperäinen kuva. Kuvat valmistellaan automaattisesti sivustolle.', 'studio-history-note'));
-      fragment.append(el('p', 'Sivulla käytössä olevan kuvan voi poistaa, kun sen tilalle on valittu toinen kuva.', 'studio-history-note'));
-    } else fragment.append(el('p', 'Poistetut kuvat säilyvät täällä palautettavina. Kuvien poistaminen näkyy heti molemmille muokkaajille.', 'studio-history-note'));
-    const grid = el('div', undefined, 'studio-media-grid');
-    for (const image of [...(showDeleted ? deletedImages : images)].reverse()) {
-      const card = el('article', undefined, 'studio-media-card'); card.dataset.mediaId = image.id;
-      const tile = showDeleted ? el('div', undefined, 'studio-media-tile') : button('', () => { draft.mediaId = image.id; if (!draft.alt) draft.alt = image.alt; render(); }, 'studio-media-tile');
-      if (!showDeleted) { tile.disabled = busy || !draft; tile.setAttribute('aria-pressed', String(image.id === draft?.mediaId)); tile.setAttribute('aria-label', `Valitse kuva: ${image.name}`); }
-      const thumbnail = el('img'); thumbnail.loading = 'lazy'; thumbnail.alt = ''; tile.append(thumbnail, el('span', image.name));
-      card.append(tile); loadPreview(thumbnail, image);
-      if (!showDeleted && image.inUse) card.append(el('small', 'Käytössä sivulla', 'studio-media-used'));
-      const action = button(showDeleted ? 'Palauta' : 'Poista', () => showDeleted ? restore(image) : remove(image), 'studio-media-action');
-      action.setAttribute('aria-label', `${showDeleted ? 'Palauta kuva' : 'Poista kuva'}: ${image.name}`);
-      action.disabled = busy || !isConnected() || !showDeleted && image.inUse;
-      if (!showDeleted && image.inUse) action.title = 'Vaihda kuvan tilalle toinen kuva ennen poistamista.';
-      card.append(action); grid.append(card);
+    const heading=el('div',undefined,'studio-media-heading');heading.append(el('h3',showDeleted?'POISTETUT KUVAT':'KUVAKIRJASTO'));
+    const toggle=button(showDeleted?'Takaisin kuvakirjastoon':`Poistetut kuvat (${deletedImages.length})`,()=>{showDeleted=!showDeleted;render();},'studio-media-remove-toggle');toggle.disabled=busy;heading.append(toggle);fragment.append(heading);
+    const grid=el('div',undefined,'studio-media-grid');
+    for(const image of [...(showDeleted?deletedImages:images)].reverse()){
+      const card=el('article',undefined,'studio-media-card');card.dataset.mediaId=image.id;
+      const tile=showDeleted?el('div',undefined,'studio-media-tile'):button('',()=>{draft.mediaId=image.id;if(!draft.alt)draft.alt=image.alt;save();},'studio-media-tile');
+      if(!showDeleted){tile.disabled=busy||!draft||!isConnected();tile.setAttribute('aria-pressed',String(image.id===draft?.mediaId));tile.setAttribute('aria-label',`Valitse kuva: ${image.name}`);}
+      const thumbnail=el('img');thumbnail.loading='lazy';thumbnail.alt='';tile.title=image.name;tile.append(thumbnail,el('span',/^studio [a-f0-9]{64}\.webp$/i.test(image.name)?image.alt||'Sivuston kuva':image.name));card.append(tile);loadPreview(thumbnail,image);
+      if(!showDeleted&&image.inUse)card.append(el('small','Käytössä sivulla','studio-media-used'));
+      const action=button(showDeleted?'Palauta':'Poista',()=>showDeleted?restore(image):remove(image),'studio-media-action');action.setAttribute('aria-label',`${showDeleted?'Palauta kuva':'Poista kuva'}: ${image.name}`);action.disabled=busy||!isConnected()||!showDeleted&&image.inUse;
+      if(!showDeleted&&image.inUse)action.title='Vaihda kuvan tilalle toinen kuva ennen poistamista.';card.append(action);grid.append(card);
     }
-    if (!grid.children.length) fragment.append(el('p', showDeleted ? 'Ei poistettuja kuvia.' : 'Kuvapankki on tyhjä. Lisää ensimmäinen kuva.', 'studio-history-note'));
-    fragment.append(grid); container.replaceChildren(fragment);
+    if(!grid.children.length)fragment.append(el('p',showDeleted?'Ei poistettuja kuvia.':'Kuvakirjastosi on vielä tyhjä. Lataa ensimmäinen kuva yltä.','studio-history-note'));
+    fragment.append(grid);container.replaceChildren(fragment);
   }
   document.addEventListener('click', event => {
     if (!enabled || busy || event.target.closest('[data-studio-chrome]')) return;

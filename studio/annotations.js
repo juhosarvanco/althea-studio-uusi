@@ -52,7 +52,7 @@ export function textRange(anchor, editors) {
   range.setStart(start.node, start.offset); range.setEnd(end.node, end.offset); return range;
 }
 
-export function createAnnotationPicker({ editors, onPick, onCancel, getComments, onJump, onHint }) {
+export function createAnnotationPicker({ editors, onPick, onCancel, getComments, onJump, onHint, onCompose = () => {} }) {
   let enabled = false, selected = null, hover = null, frame;
   const layer = document.createElement('div'); layer.id = 'studio-annotation-layer'; layer.dataset.studioChrome = '';
   const box = document.createElement('div'), highlight = document.createElement('div'), pins = document.createElement('div');
@@ -71,26 +71,21 @@ export function createAnnotationPicker({ editors, onPick, onCancel, getComments,
   }
   function draw() {
     drawBox(box, enabled ? hover?.getBoundingClientRect() : null);
-    drawBox(highlight, selected ? rectangle(selected) : null);
+    drawBox(highlight, enabled && selected ? rectangle(selected) : null);
     pins.replaceChildren();
-    const grouped = new Map();
-    for (const [id, comment] of getComments()) {
-      if (comment.resolved) continue;
-      const anchor = comment.anchor || { kind: 'field', fieldId: comment.fieldId }, key = anchorKey(anchor);
-      if (!grouped.has(key)) grouped.set(key, { anchor, ids: [] }); grouped.get(key).ids.push(id);
-    }
-    let index = 0;
-    const visibleTop = Math.max(document.querySelector('.site-header')?.getBoundingClientRect().bottom || 0,
-      document.querySelector('.studio-bar')?.getBoundingClientRect().bottom || 0) + 8;
-    for (const { anchor, ids } of grouped.values()) {
-      const rect = rectangle(anchor); index++;
-      if (!rect || !rect.width || !rect.height || rect.bottom < visibleTop || rect.top > innerHeight || rect.right < 0 || rect.left > innerWidth) continue;
-      const pin = document.createElement('button'); pin.type = 'button'; pin.className = 'studio-comment-pin';
-      pin.textContent = ids.length > 1 ? `${index} · ${ids.length}` : String(index);
-      pin.setAttribute('aria-label', `Avaa kohteen kommentit (${ids.length})`);
-      Object.assign(pin.style, { left: `${Math.min(innerWidth - 36, Math.max(4, rect.right - 14))}px`, top: `${Math.max(visibleTop, rect.top - 12)}px` });
-      pin.onclick = () => onJump(ids[0]); pins.append(pin);
-    }
+    if (!enabled) return;
+    const visibleTop=document.querySelector('.studio-bar')?.getBoundingClientRect().bottom+8 || 80;
+    const active=[...getComments()].filter(([,comment])=>!comment.resolved).sort((a,b)=>b[1].createdAt.localeCompare(a[1].createdAt));
+    const stacks=new Map();
+    active.forEach(([id,comment],index)=>{
+      const anchor=comment.anchor||{kind:'field',fieldId:comment.fieldId},rect=rectangle(anchor);
+      if(!rect||!rect.width||!rect.height||rect.bottom<visibleTop||rect.top>innerHeight||rect.right<0||rect.left>innerWidth)return;
+      const key=anchorKey(anchor),offset=stacks.get(key)||0;stacks.set(key,offset+1);
+      const pin=document.createElement('button');pin.type='button';pin.className='studio-comment-pin';pin.textContent=String(index+1);pin.setAttribute('aria-label',`Avaa kommentti ${index+1}`);
+      const p=comment.position||{x:1,y:0};
+      Object.assign(pin.style,{left:`${Math.min(innerWidth-36,Math.max(4,rect.left+rect.width*p.x-14-offset*24))}px`,top:`${Math.max(visibleTop,rect.top+rect.height*p.y-12)}px`});
+      pin.onclick=()=>onJump(id);pins.append(pin);
+    });
   }
   const refresh = () => { cancelAnimationFrame(frame); frame = requestAnimationFrame(draw); };
   function choose(anchor) {
@@ -128,15 +123,16 @@ export function createAnnotationPicker({ editors, onPick, onCancel, getComments,
       const group = (common.nodeType === 1 ? common : common.parentElement).closest(selectable);
       if (group) { choose(anchorFor(group)); onHint('Katkelma ulottuu useaan tekstikohtaan tai on liian pitkä. Kommentti kohdistuu valitun tekstin yhteiseen alueeseen.'); }
     } else if (el) { selection?.removeAllRanges(); choose(anchorFor(el)); }
+    if (selected) { const rect=anchorElement(selected)?.getBoundingClientRect(); onCompose(selected,{x:rect?.width?Math.max(0,Math.min(1,(event.clientX-rect.left)/rect.width)):1,y:rect?.height?Math.max(0,Math.min(1,(event.clientY-rect.top)/rect.height)):0}); }
   }, true);
   document.addEventListener('keydown', event => {
     if (!enabled) return;
-    if (event.key === 'Escape' && !document.querySelector('dialog[open]')) { event.preventDefault(); onCancel(); return; }
     if (event.target.closest('[data-studio-chrome]')) return;
+    if (event.key === 'Escape' && !document.querySelector('dialog[open]')) { event.preventDefault(); onCancel(); return; }
     if (galleryNavigation(event)) { refresh(); return; }
     if (['Enter', ' '].includes(event.key) && event.target.closest('a,button,summary,input,select')) {
       event.preventDefault(); event.stopImmediatePropagation();
-      const el = event.target.closest(selectable); if (el) choose(anchorFor(el));
+      const el = event.target.closest(selectable); if (el) { choose(anchorFor(el)); onCompose(selected,{x:1,y:0}); }
     }
   }, true);
   window.addEventListener('scroll', refresh, { passive: true, capture: true }); window.addEventListener('resize', refresh);

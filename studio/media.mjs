@@ -55,7 +55,7 @@ export class MediaLibrary {
     this.indexPath = join(this.directory, 'library.json');
     this.entries = existsSync(this.indexPath) ? JSON.parse(readFileSync(this.indexPath, 'utf8')) : [];
     const { document } = parseHTML(template);
-    this.assetPrefix = document.documentElement.getAttribute('lang') === 'en' ? '../' : '';
+    this.assetPrefix = document.documentElement.getAttribute('lang') === 'fi' ? '' : '../';
     for (const image of document.querySelectorAll('img[src]')) {
       const path = cleanPath(image.getAttribute('src'));
       if (!/^assets\/img\/[a-zA-Z0-9._-]+\.webp$/.test(path) || !existsSync(join(site, path))) continue;

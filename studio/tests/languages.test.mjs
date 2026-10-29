@@ -106,3 +106,46 @@ test('language routing and shared asset URLs resolve correctly from both editor 
     assert.equal(publicPage.querySelector('#studio-language'), null);
   }
 });
+
+test('new language drafts copy the current content safely and retain independent history after restart', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'althea-new-language-'));
+  const options = { port: 0, secret, dataDir: directory, allowed: ['juho'], origins: [origin], login: { check() {} } };
+  let server = await createStudioServer(options);
+  t.after(async () => { await server.close(); await rm(directory, { recursive: true, force: true }); });
+  const headers = { authorization: `Bearer ${issueStudioToken({login:'juho',name:'Juho'},secret)}`, Origin: origin, 'content-type':'application/json' };
+  const request = (path, body, overrides={}) => fetch(`http://127.0.0.1:${server.port}${path}`,{headers,...(body?{method:'POST',body:JSON.stringify(body)}:{}),...overrides});
+  const fiBefore = server.store.export(), enBefore = server.contexts.get('en').store.export();
+  assert.equal((await request('/api/add-language',{code:'sv',vector:'stale'})).status,409);
+  assert.equal((await request('/api/add-language',{code:'zz',vector:fiBefore.vector})).status,400);
+  assert.equal((await request('/api/add-language',{code:'sv',vector:fiBefore.vector},{headers:{...headers,Origin:'https://wrong.example'}})).status,403);
+  assert.equal((await fetch(`http://127.0.0.1:${server.port}/api/languages`)).status,401);
+  const added=await request('/api/add-language',{code:'sv',vector:fiBefore.vector});assert.equal(added.status,200);
+  const swedish=server.contexts.get('sv').store;
+  assert.match(swedish.export().html,/lang="sv"/);
+  assert.ok(!swedish.export().html.includes('noindex, nofollow'));
+  assert.match(swedish.export().html,/\.\.\/assets\//);
+  assert.equal(swedish.comments.size,0);
+  assert.equal((await request('/api/add-language',{code:'sv',vector:fiBefore.vector})).status,422);
+  assert.deepEqual(server.store.export(),fiBefore);assert.deepEqual(server.contexts.get('en').store.export(),enBefore);
+  const sv=client(server,'sv','juho');await waitFor(()=>sv.provider.synced);
+  const field=swedish.manifest.fields.find(f=>f.tag==='h1').id;
+  sv.doc.getXmlFragment(field).get(0).get(0).insert(0,'Svenska: ');
+  sv.doc.getMap('comments').set('sv-comment',{fieldId:field,body:'Svensk kommentar',author:'Juho',createdAt:new Date().toISOString(),resolved:false,position:{x:.3,y:.4}});
+  await waitFor(()=>vector(sv.doc)===vector(swedish.doc));sv.close();
+  const snapshot=swedish.export(),history=swedish.fieldHistory(field);
+  assert.equal((await request('/api/sv/layout')).status,200);
+  assert.equal((await (await request('/api/languages')).json()).languages.find(l=>l.code==='sv').draft,true);
+  await server.close();server=await createStudioServer(options);
+  assert.deepEqual(server.contexts.get('sv').store.export(),snapshot);
+  assert.deepEqual(server.contexts.get('sv').store.fieldHistory(field),history);
+  assert.deepEqual(server.contexts.get('sv').store.comments.get('sv-comment').position,{x:.3,y:.4});
+  assert.deepEqual(server.store.export(),fiBefore);
+  // Unregistered data must never be removed by failed language creation.
+  const {mkdir,writeFile}=await import('node:fs/promises');await mkdir(join(directory,'de'));await writeFile(join(directory,'de','keep.txt'),'retain');
+  assert.equal((await request('/api/add-language',{code:'de',vector:fiBefore.vector})).status,409);
+  assert.equal(await readFile(join(directory,'de','keep.txt'),'utf8'),'retain');
+});
+
+test('query-selected languages use isolated API and websocket rooms',()=>{
+ const before=globalThis.location;try{globalThis.location={pathname:'/studio/',search:'?lang=sv'};assert.equal(studioLanguage(),'sv');assert.equal(contentPath('/api/layout'),'/api/sv/layout');assert.equal(studioRoom(),'althea-uusi-sv');}finally{globalThis.location=before;}
+});

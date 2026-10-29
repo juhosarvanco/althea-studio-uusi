@@ -1,0 +1,11 @@
+{
+  "repository": "juhosarvanco/100hrs",
+  "commit": "1bcc81f5092dfb56cf8aa7b2c0cc57ff48585e31",
+  "path": "packages/studio-ui",
+  "hashes": {
+    "package.json": "3e90db3a71f0823606197cdf39672d928021c1df8d7e868864f07a9b23960d49",
+    "components.mjs": "dd73a8c36661c295b9a7ad8890a828464f73998693ba370fb5b1ecf31e832939",
+    "languages.mjs": "e9ecdf799074aeb5694f221579cd7ef1a187921096856c391ddd461b9b490b30",
+    "ui.css": "f58131d9e25cc563e0023a065a5383a698c3a19c911f66d2aaa21e94999e0824"
+  }
+}

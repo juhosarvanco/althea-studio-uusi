@@ -83,3 +83,28 @@ test('English publication checks and updates /en only, preserving the Finnish pa
   assert.equal(await readFile(join(directory, 'en/index.html'), 'utf8'), snapshot.html);
   assert.equal(store.export().publicHash, digest(snapshot.html));
 });
+
+test('first publication creates only the registered new language and subsequent publication checks its baseline', async t=>{
+ const {store,calls,directory}=await setup(t);
+ let committed=false,existing=false;
+ const source=store.export();
+ const publisher=new GithubPublisher({store,media:{publicationAssets:()=>[]},site:directory,language:'sv',canCreate:()=>!committed,onPublished:()=>{committed=true;},request:async(path,body,method)=>{
+  calls.push({path,body,method});
+  if(path.includes('/git/ref/heads/'))return {object:{sha:'parent'}};
+  if(path.endsWith('/git/commits/parent'))return {tree:{sha:'base-tree'}};
+  if(path.includes('/git/trees/base-tree?'))return {tree:existing?[{path:'site/sv/index.html'}]:[],truncated:false};
+  if(path.includes('/contents/'))return {encoding:'base64',content:Buffer.from('external content').toString('base64')};
+  if(path.endsWith('/git/trees'))return {sha:'tree'};
+  if(path.endsWith('/git/commits'))return {sha:'commit'};
+  if(path.includes('/git/refs/heads/'))return {};
+  throw Error(path);
+ }});
+ const result=await publisher.publish({vector:source.vector,layoutHash:source.layoutHash},{sub:'juho',name:'Juho'});
+ assert.equal(result.website,'https://www.althea.fi/sv/');assert.equal(committed,true);
+ assert.deepEqual(calls.find(c=>c.path.endsWith('/git/trees')).body.tree.map(f=>f.path),['site/sv/index.html']);
+ assert.equal(await readFile(join(directory,'sv/index.html'),'utf8'),source.html);
+ assert.ok(calls.find(c=>c.method==='PATCH').body.force===false);
+ await assert.rejects(publisher.publish({vector:source.vector,layoutHash:source.layoutHash},{sub:'juho',name:'Juho'}),e=>e.status===409);
+ committed=false;existing=true;
+ await assert.rejects(publisher.publish({vector:source.vector,layoutHash:source.layoutHash},{sub:'juho',name:'Juho'}),e=>e.status===409);
+});

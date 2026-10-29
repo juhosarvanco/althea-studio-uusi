@@ -122,6 +122,7 @@ export class StudioStore extends EventEmitter {
         || typeof comment.body !== 'string' || comment.body.length > 2000
         || typeof comment.author !== 'string' || comment.author.length > 100
         || typeof comment.createdAt !== 'string' || typeof comment.resolved !== 'boolean') throw new Error('Invalid comment');
+      if(comment.position&&(!['x','y'].every(key=>Number.isFinite(comment.position[key])&&comment.position[key]>=0&&comment.position[key]<=1)))throw new Error('Invalid comment position');
       const anchor = comment.anchor || { kind: 'field', fieldId: comment.fieldId };
       if (anchor.kind === 'element') {
         if (!layout.targets?.some(target => target.id === anchor.nodeId) || JSON.stringify(anchor).length > 200) throw new Error('Invalid comment target');

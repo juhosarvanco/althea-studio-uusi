@@ -1,30 +1,25 @@
 <div class="studio-bar" data-studio-chrome>
-  <a class="studio-brand" href="#alku">ALTHEA <span>Uuden version Studio</span></a>
-  <label class="studio-language" lang="fi">Muokattava kieli
-    <select id="studio-language" aria-label="Muokattava kieli">
-      <option value="fi">Suomi</option><option value="en">English</option>
-    </select>
-  </label>
+  <a class="studio-brand" href="#alku">ALTHEA <span>Studio</span></a>
   <span id="studio-status" role="status" aria-live="polite">Yhdistetään…</span>
-  <div id="studio-people" aria-label="Osallistujat"></div>
   <div class="studio-actions">
-    <button id="studio-mode" type="button">Esikatsele</button>
-    <button id="studio-images" type="button" aria-pressed="false">Kuvat</button>
-    <button id="studio-undo" type="button" aria-label="Peru oma tekstimuutos" title="Peru oma muutos valitussa tekstissä">↶</button>
-    <button id="studio-redo" type="button" aria-label="Tee oma tekstimuutos uudelleen" title="Tee uudelleen">↷</button>
-    <button id="studio-comments" type="button">Kommentit <span id="studio-comment-count">0</span></button>
-    <button id="studio-annotate" type="button" aria-pressed="false">Kommentoi aluetta</button>
-    <button id="studio-field-history" type="button" disabled title="Valitse ensin otsikko tai tekstikappale">Kohdan historia</button>
-    <button id="studio-history" type="button">Versiot</button>
-    <button id="studio-archive" type="button" hidden>Arkisto</button>
-    <button id="studio-publish" type="button" class="studio-primary">Julkaise</button>
-    <button id="studio-logout" type="button">Kirjaudu ulos</button>
+    <label class="studio-language"><span class="studio-visually-hidden">Sivuston kieli</span><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7.5"/><ellipse cx="10" cy="10" rx="3.5" ry="7.5"/><path d="M2.5 10h15"/></svg><select id="studio-language" aria-label="Sivuston kieli"><option value="fi">Suomi</option><option value="en">English</option></select></label>
+    <button id="studio-history" type="button" class="studio-subtle" aria-expanded="false">Versiot</button>
+    <div class="studio-mode-switch" role="group" aria-label="Studion työtila">
+      <button id="studio-edit" data-workspace-mode="edit" type="button" aria-pressed="true"><span data-ui-icon="edit"></span>Muokkaa</button>
+      <button id="studio-images" data-workspace-mode="images" type="button" aria-pressed="false"><span data-ui-icon="images"></span>Kuvat</button>
+      <button id="studio-ai" data-workspace-mode="ai" type="button" aria-pressed="false"><span data-ui-icon="ai"></span>Tekoäly</button>
+    </div>
+    <button id="studio-publish" type="button" class="studio-primary">Julkaise <span data-ui-icon="arrow"></span></button>
+    <div id="studio-people" aria-label="Osallistujat"></div>
+    <button id="studio-logout" type="button" class="studio-logout" aria-label="Kirjaudu ulos" title="Kirjaudu ulos"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8 3H3v14h5M11 6l4 4-4 4M7 10h9"/></svg></button>
   </div>
 </div>
-<aside id="studio-sidebar" data-studio-chrome hidden>
-  <div class="studio-panel-heading"><h2 id="studio-panel-title">Kommentit</h2><button id="studio-close" type="button" aria-label="Sulje sivupaneeli">×</button></div>
-  <div id="studio-panel-content"></div>
+<div class="studio-canvas-tools" data-studio-chrome><span id="studio-canvas-label">Yhteinen työversio</span><div><button id="studio-undo" type="button" aria-label="Peru oma tekstimuutos" title="Peru oma muutos"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 8h7a5 5 0 0 1 0 10M4 8l4-4M4 8l4 4"/></svg></button><button id="studio-redo" type="button" aria-label="Tee oma tekstimuutos uudelleen" title="Tee uudelleen"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M16 8H9a5 5 0 0 0 0 10M16 8l-4-4M16 8l-4 4"/></svg></button><button id="studio-mode" type="button" aria-pressed="false">Esikatsele</button></div></div>
+<aside id="studio-sidebar" data-studio-chrome>
+  <div id="studio-sidebar-inner"><div class="studio-panel-heading"><h2 id="studio-panel-title">Muutoshistoria</h2></div><div id="studio-panel-content"></div></div>
+  <button id="studio-sidebar-toggle" type="button" aria-label="Piilota sivupaneeli" aria-expanded="true" aria-controls="studio-sidebar-inner"><span data-ui-icon="chevron"></span></button>
 </aside>
+<div data-studio-chrome hidden><button id="studio-close" type="button">Sulje sivupaneeli</button><button id="studio-comments" type="button">Kommentit <span id="studio-comment-count">0</span></button><button id="studio-annotate" type="button">Kommentoi aluetta</button><button id="studio-field-history" type="button">Kohdan historia</button><button id="studio-archive" type="button">Arkisto</button></div>
 <dialog id="studio-gate" data-studio-chrome>
   <p class="studio-kicker">ALTHEA / YHTEINEN TYÖTILA</p>
   <h2>Muokataan yhdessä.</h2>
@@ -51,3 +46,5 @@
   <p>Tämä alue poistettiin sivulta. Voit kirjoittaa tekstin loppuun; teksti ja muutokset säilyvät arkistossa.</p>
   <div data-archive-editor></div><button id="studio-archive-close" type="button">Sulje tallennettu teksti</button>
 </aside>
+
+<dialog id="studio-language-dialog" data-studio-chrome aria-labelledby="studio-language-title"><form id="studio-language-form"><p class="studio-kicker">SIVUSTON KIELET</p><h2 id="studio-language-title">Lisää kieliversio</h2><label for="studio-new-language">Kieli</label><select id="studio-new-language" required></select><p id="studio-language-note"></p><p>Uusi kieliversio on luonnos. Käännä tekstit ja julkaise se, kun sisältö on valmis.</p><p id="studio-language-error" role="alert" hidden></p><div class="studio-confirm-actions"><button type="button" id="studio-language-cancel">Peruuta</button><button class="studio-primary" id="studio-language-create" type="submit">Lisää kieli</button></div></form></dialog>

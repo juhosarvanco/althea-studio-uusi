@@ -1,3 +1,6 @@
+import {initializeWorkspace,aiStatus,commentCard,timeline,versionRow,formatDate} from './workspace.mjs';
+import {createInlineComposer} from './composer.js';
+import {LANGUAGE_OPTIONS,languageName as labelForLanguage} from '../vendor/studio-ui/languages.mjs';
 import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
 import * as decoding from 'lib0/decoding';
@@ -21,7 +24,9 @@ requireTopLevel(window, document);
 
 const $ = selector => document.querySelector(selector);
 const language = studioLanguage();
-const languageName = language === 'en' ? 'englanninkielinen' : 'suomenkielinen';
+const languageName=labelForLanguage(language);
+const workspace=initializeWorkspace();
+let workspaceMode='edit',aiTab='comments',availableLanguages=[];
 const doc = new Y.Doc();
 const editors = new Map();
 let session, provider, activeField = null, editing = true, connected = false, persisted = '', panel = null, mounted = false;
@@ -131,7 +136,7 @@ function mountFields() {
     el.addEventListener('click', event => { if (editing && event.target.closest('a')) event.preventDefault(); select(id); });
   }
   document.body.classList.toggle('studio-editing', editing);
-  if (first) registerTools();
+  if (first) { registerTools(); if(!panel) showPanel('field-history',false); }
 }
 function renderPeople() {
   const people = $('#studio-people'); people.replaceChildren();
@@ -150,19 +155,21 @@ function renderPeople() {
     el?.classList.add('studio-remote'); el?.style.setProperty('--remote-color', state.user.color);
   }
 }
-function showPanel(type) {
-  mediaMode.setEnabled(type === 'images');
-  editors.forEach(editor => editor.setEditable(editing && !annotating && !mediaMode.enabled));
-  panel = type; $('#studio-sidebar').hidden = false; document.body.classList.add('studio-panel-open');
-  document.body.classList.toggle('studio-images-open', type === 'images');
-  document.body.classList.toggle('studio-field-history-open', type === 'field-history');
-  $('#studio-panel-title').textContent = type === 'images' ? 'Kuvat' : type === 'comments' ? 'Kommentit' : type === 'field-history' ? 'Kohdan historia' : type === 'archive' ? 'Poistettujen alueiden tekstit' : 'Versiohistoria';
-  if (type === 'images') { $('#studio-panel-content').replaceChildren(node('p', 'Ladataan kuvapankkia…')); mediaMode.render(); }
-  else if (type === 'comments') renderComments();
-  else if (type === 'archive') renderArchive();
-  else (type === 'field-history' ? renderFieldHistory() : renderHistory()).catch(error => toast(error.message));
+function showPanel(type,reveal=true) {
+  mediaMode.setEnabled(type==='images' && workspaceMode==='images');
+  editors.forEach(editor=>editor.setEditable(editing&&!annotating&&!mediaMode.enabled));
+  panel=type;document.body.classList.add('studio-panel-open');
+  document.body.classList.toggle('studio-images-open',type==='images');document.body.classList.toggle('studio-field-history-open',type==='field-history');
+  document.body.classList.toggle('studio-ai-open',type==='comments');
+  $('#studio-history').setAttribute('aria-expanded',String(type==='history'));
+  $('#studio-panel-title').textContent={images:'Kuvat ja taustat',comments:'Tekoäly','field-history':'Muutoshistoria',archive:'Poistettujen alueiden tekstit',history:'Versiot'}[type];
+  if(reveal)workspace.inspector.set(false);
+  if(type==='images'){$('#studio-panel-content').replaceChildren(node('p','Ladataan kuvakirjastoa…'));mediaMode.render();}
+  else if(type==='comments')renderComments();else if(type==='archive')renderArchive();
+  else (type==='field-history'?renderFieldHistory():renderHistory()).catch(error=>toast(error.message));
   picker.refresh();
 }
+
 function node(tag, text, className) { const el = document.createElement(tag); el.textContent = text; if (className) el.className = className; return el; }
 function renderArchive() {
   const container = $('#studio-panel-content'); container.replaceChildren(node('p', 'Sivulta poistetut tekstit, kommentit ja kohdan historia säilyvät täällä.'));
@@ -181,7 +188,13 @@ const picker = createAnnotationPicker({ editors, getComments: () => comments,
     provider?.awareness.setLocalStateField('activeField', activeField);
     if (annotating) showPanel('comments'); else if (panel === 'comments') renderComments();
     if (changed && panel === 'comments') $('#studio-sidebar').scrollTop = 0;
-  }, onCancel: () => setAnnotationMode(false), onJump: id => jumpToComment(id), onHint: toast });
+  }, onCancel: () => setAnnotationMode(false), onJump: id => jumpToComment(id), onHint: toast, onCompose:(anchor,position)=>composer.open(anchor,{position}) });
+const composer=createInlineComposer({getPicker:()=>picker,getComment:id=>comments.get(id),onDraft:value=>commentDraft=value,save:({anchor,body,id,position})=>{
+  if(!connected)throw new Error('Odota yhteyden palautumista.');
+  if(id&&comments.has(id)){const comment=comments.get(id);comments.set(id,{...comment,body:body.trim(),updatedAt:new Date().toISOString(),position});}
+  else addComment(anchor.fieldId,body,anchor,position);
+  toast('Kommentti tallennettu yhteiseen työversioon.');
+}});
 function commentAnchor(comment) { return comment.anchor || { kind: 'field', fieldId: comment.fieldId }; }
 function anchorLabel(anchor) {
   const el = anchorElement(anchor);
@@ -189,16 +202,17 @@ function anchorLabel(anchor) {
   return layout?.targets?.find(target => target.id === anchor?.nodeId)?.label
     || layout?.archived.find(field => field.id === anchor?.fieldId)?.section || anchor?.fieldId || 'Poistettu kohde';
 }
-function addComment(fieldId, body, anchor = { kind: 'field', fieldId }) {
+function addComment(fieldId, body, anchor = { kind: 'field', fieldId },position={x:1,y:0}) {
   if (!connected || !anchor || anchor.kind === 'element' && !layout.targets?.some(target => target.id === anchor.nodeId && !target.archivedAt)
     || anchor.kind !== 'element' && !editors.has(anchor.fieldId)) throw new Error('Valitse ensin sivulta kommentoitava kohde.');
   if (!body.trim() || body.length > 2000) throw new Error('Kirjoita 1–2000 merkin kommentti.');
   const id = crypto.randomUUID();
-  comments.set(id, { fieldId: anchor.fieldId || null, anchor, body: body.trim(), author: session.user.name, createdAt: new Date().toISOString(), resolved: false });
+  comments.set(id, { fieldId: anchor.fieldId || null, anchor, position, body: body.trim(), author: session.user.name, createdAt: new Date().toISOString(), resolved: false });
   return id;
 }
 function jumpToComment(id) {
   const comment = comments.get(id); if (!comment) return;
+  setWorkspaceMode('ai');
   const anchor = commentAnchor(comment), el = anchorElement(anchor);
   if (!el || el.closest('[data-studio-chrome]')) {
     if (anchor.fieldId) { select(anchor.fieldId); showPanel('field-history'); }
@@ -210,65 +224,32 @@ function jumpToComment(id) {
   if (anchor.kind === 'text' && !textRange(anchor, editors)) toast('Alkuperäinen tekstikatkelma on muuttunut tai poistettu. Kommentin lainaus säilyy.');
   requestAnimationFrame(() => { const item = document.querySelector(`[data-comment-id="${CSS.escape(id)}"]`);
     document.querySelectorAll('.studio-comment-focused').forEach(el => el.classList.remove('studio-comment-focused'));
-    item?.classList.add('studio-comment-focused'); item?.scrollIntoView({ block: 'nearest' }); picker.refresh(); });
+    item?.classList.add('studio-comment-focused'); item?.scrollIntoView({ block: 'nearest' }); picker.refresh(); composer.open(anchor,{id,number:[...comments].filter(([,c])=>!c.resolved).sort((a,b)=>b[1].createdAt.localeCompare(a[1].createdAt)).findIndex(([key])=>key===id)+1}); });
 }
 function renderComments() {
-  const previous = $('#studio-panel-content textarea');
-  const draft = previous?.value ?? commentDraft, focused = document.activeElement === previous;
-  const container = $('#studio-panel-content'); container.replaceChildren();
-  const anchor = picker.selected || (activeField ? { kind: 'field', fieldId: activeField } : null);
-  container.append(node('p', anchor ? `Valittu: ${anchorLabel(anchor)}` : 'Paina Kommentoi aluetta ja valitse sivulta teksti, kuva, painike tai alue.', 'studio-field-name'));
-  if (annotating) container.append(node('p', 'Klikkaa kohdetta tai maalaa tekstikatkelma. Voit vaihtaa valinnan tasoa alla. Esc lopettaa kommentointitilan.', 'studio-history-note'));
-  if (anchor) {
-    const levels = node('div', '', 'studio-target-levels'); levels.setAttribute('aria-label', 'Valinnan taso');
-    const allLevels = picker.levels();
-    for (const el of allLevels.filter(el => el.tagName !== 'DIV' || el === anchorElement(anchor))) {
-      const button = node('button', elementLabel(el)); button.type = 'button';
-      button.setAttribute('aria-pressed', String(el === anchorElement(anchor) && anchor.kind !== 'text'));
-      button.onclick = () => picker.choose(anchorFor(el)); levels.append(button);
-    }
-    container.append(levels);
-    if (allLevels.some(el => el.tagName === 'DIV')) {
-      const details = document.createElement('details'), summary = node('summary', 'Kaikki valinnan tasot'), select = document.createElement('select');
-      select.setAttribute('aria-label', 'Kaikki valinnan tasot'); select.append(new Option('Valitse taso…', ''));
-      allLevels.forEach((el, index) => select.append(new Option(`${index + 1}. ${elementLabel(el)}`, String(index))));
-      select.onchange = () => { if (select.value !== '') picker.choose(anchorFor(allLevels[Number(select.value)])); };
-      details.className = 'studio-all-levels'; details.append(summary, select); container.append(details);
-    }
-    const el = anchorElement(anchor);
-    const children = [...(el?.querySelectorAll('[data-studio-node], [data-studio-field]') || [])]
-      .filter(child => child.parentElement.closest('[data-studio-node], [data-studio-field]') === el);
-    if (children.length) {
-      const label = node('label', 'Valitse tarkempi kohde', 'studio-compare-label'), select = document.createElement('select');
-      select.setAttribute('aria-label', 'Valitse tarkempi kohde'); select.append(new Option('Valitse…', ''));
-      children.forEach((child, index) => select.append(new Option(elementLabel(child), String(index))));
-      select.onchange = () => { if (select.value !== '') picker.choose(anchorFor(children[Number(select.value)])); };
-      label.append(select); container.append(label);
-    }
-    if (anchor.kind === 'text') container.append(node('blockquote', anchor.quote, 'studio-comment-quote'));
+ const container=$('#studio-panel-content');container.replaceChildren();
+ const content=node('div','','studio-ai-content');container.append(content);aiStatus(content);
+ const active=[...comments].filter(([,c])=>!c.resolved).sort((a,b)=>b[1].createdAt.localeCompare(a[1].createdAt));
+ const tabs=node('div','','sui-tabs');tabs.setAttribute('role','tablist');tabs.setAttribute('aria-label','Tekoälyn työkalut');
+ for(const [key,title,count] of [['comments','Kommentit',active.length],['changes','Tehdyt muutokset',0]]){
+  const button=node('button',title);button.type='button';button.setAttribute('role','tab');button.setAttribute('aria-selected',String(aiTab===key));button.setAttribute('aria-controls',`studio-ai-${key}`);button.id=`studio-ai-tab-${key}`;button.tabIndex=aiTab===key?0:-1;button.append(node('span',String(count)));
+  button.onclick=()=>{aiTab=key;renderComments();};button.onkeydown=event=>{if(['ArrowLeft','ArrowRight','Home','End'].includes(event.key)){event.preventDefault();aiTab=key==='comments'?'changes':'comments';renderComments();$(`#studio-ai-tab-${aiTab}`).focus();}};tabs.append(button);
+ }
+ content.append(tabs);const list=node('div','','studio-ai-list');list.id=`studio-ai-${aiTab}`;list.setAttribute('role','tabpanel');list.setAttribute('aria-labelledby',`studio-ai-tab-${aiTab}`);content.append(list);
+ if(aiTab==='changes'){
+  list.append(node('p','Tekoälyn toteuttamat muutokset ja niiden palautukset. Julkaiset muutokset erikseen.','sui-help'));
+  const empty=node('div','','studio-ai-empty');empty.append(node('h3','Ei vielä tekoälyn tekemiä muutoksia'),node('p','Tekoälyllä toteutetut muutokset näkyvät tässä. Käsin tehdyt tekstimuutokset löydät Muokkaa-tilan historiasta.'));list.append(empty);
+ }else{
+  const options=node('label','','studio-show-removed'),toggle=document.createElement('input');toggle.type='checkbox';toggle.checked=showResolvedComments;toggle.onchange=()=>{showResolvedComments=toggle.checked;renderComments();};options.append(toggle,document.createTextNode(' Näytä poistetut'));list.append(options);
+  const entries=[...comments].filter(([,c])=>showResolvedComments||!c.resolved).sort((a,b)=>b[1].createdAt.localeCompare(a[1].createdAt));
+  if(!entries.length)list.append(node('p','Ei avoimia kommentteja. Klikkaa sivulta kohtaa ja kirjoita muutostoiveesi.','sui-help'));
+  for(const [id,comment] of entries){const {card,actions}=commentCard({id,number:active.findIndex(([key])=>key===id)+1,author:comment.author,at:comment.createdAt,target:anchorLabel(commentAnchor(comment)),body:comment.body,resolved:comment.resolved});
+   const jump=node('button','Näytä kohta'),remove=node('button',comment.resolved?'Palauta':'Poista');jump.type=remove.type='button';jump.onclick=()=>jumpToComment(id);remove.onclick=()=>comments.set(id,{...comments.get(id),resolved:!comment.resolved});actions.append(jump,remove);list.append(card);
   }
-  const form = document.createElement('form'), input = document.createElement('textarea'), button = node('button', 'Lisää kommentti');
-  input.placeholder = 'Ajatus, kysymys tai muokkaustoive…'; input.maxLength = 2000; input.setAttribute('aria-label', 'Uusi kommentti');
-  input.value = draft;
-  input.oninput = () => commentDraft = input.value;
-  button.type = 'submit'; button.disabled = !anchor || !connected; form.append(input, button); container.append(form);
-  form.onsubmit = event => { event.preventDefault(); const body = input.value; input.value = ''; commentDraft = '';
-    try { addComment(anchor.fieldId, body, anchor); } catch (error) { input.value = body; commentDraft = body; toast(error.message); } };
-  if (focused) input.focus();
-  const toggle = node('button', showResolvedComments ? 'Näytä avoimet kommentit' : 'Näytä myös käsitellyt'); toggle.type = 'button';
-  toggle.onclick = () => { showResolvedComments = !showResolvedComments; renderComments(); }; container.append(toggle);
-  const list = [...comments].filter(([, comment]) => showResolvedComments || !comment.resolved).sort((a, b) => b[1].createdAt.localeCompare(a[1].createdAt));
-  for (const [id, comment] of list) {
-    const item = document.createElement('article'); item.className = 'studio-comment'; item.dataset.commentId = id;
-    item.append(node('small', `${comment.author} · ${new Date(comment.createdAt).toLocaleString('fi-FI')}${comment.resolved ? ' · Käsitelty' : ''}`), node('p', anchorLabel(commentAnchor(comment)), 'studio-field-name'));
-    if (comment.anchor?.kind === 'text') item.append(node('blockquote', comment.anchor.quote, 'studio-comment-quote'));
-    item.append(node('p', comment.body));
-    const actions = node('div', '', 'studio-panel-buttons'), jump = node('button', 'Näytä kohta'), resolve = node('button', comment.resolved ? 'Avaa uudelleen' : 'Merkitse käsitellyksi');
-    jump.onclick = () => jumpToComment(id);
-    resolve.onclick = () => comments.set(id, { ...comments.get(id), resolved: !comment.resolved });
-    actions.append(jump, resolve); item.append(actions); container.append(item);
-  }
+ }
+ const footer=node('div','','studio-ai-footer'),apply=node('button','Toteuta muutokset','studio-primary');apply.type='button';apply.disabled=true;footer.append(apply,node('p','Tekoälyyhteys lisätään myöhemmin.'));container.append(footer);
 }
+
 comments.observe(() => { picker.refresh(); $('#studio-comment-count').textContent = [...comments.values()].filter(comment => !comment.resolved).length;
   if (panel === 'comments') renderComments(); });
 async function confirmation(title, message, label) {
@@ -281,82 +262,30 @@ async function confirmation(title, message, label) {
   });
 }
 async function renderHistory() {
-  const container = $('#studio-panel-content'); container.replaceChildren(node('p', 'Ladataan versioita…'));
-  const { versions } = await api('/api/versions'); if (panel !== 'history') return;
-  container.replaceChildren(node('p', 'Automaattinen versio tallentuu 15 minuutin välein. Voit myös nimetä tämänhetkisen version.'));
-  const form = document.createElement('form'), input = document.createElement('input'), button = node('button', 'Tallenna nimetty versio');
-  input.placeholder = 'Esimerkiksi: Tekstit tarkistettu'; input.maxLength = 100; input.setAttribute('aria-label', 'Version nimi');
-  form.append(input, button); container.append(form);
-  form.onsubmit = async event => { event.preventDefault(); try { if (!durable()) throw new Error('Odota muutosten tallentumista.');
-    await api('/api/checkpoint', { title: input.value, vector: stateVector() }); await renderHistory(); toast('Versio tallennettu.'); } catch (error) { toast(error.message); } };
-  for (const version of versions) {
-    const item = node('article', '', 'studio-version'); item.append(node('h3', version.title), node('small', `${version.author} · ${new Date(version.createdAt).toLocaleString('fi-FI')}`));
-    const restore = node('button', 'Palauta tämä versio');
-    restore.onclick = async () => { if (!await confirmation('Palautetaanko yhteinen versio?', 'Tämä palauttaa koko työversion, myös kommentit, molemmille muokkaajille. Nykyinen sisältö tallennetaan ensin historiaan.', 'Palauta')) return;
-      try { await api('/api/restore', { id: version.id, vector: stateVector() }); await renderHistory(); toast('Yhteinen versio palautettu.'); } catch (error) { toast(error.message); } };
-    item.append(restore); container.append(item);
-  }
+ const container=$('#studio-panel-content');container.replaceChildren(node('p','Ladataan versioita…','sui-help'));
+ const {versions}=await api('/api/versions');if(panel!=='history')return;container.replaceChildren();
+ const form=document.createElement('form'),input=document.createElement('input'),button=node('button','Tallenna versio','sui-button');form.className='studio-version-form';input.placeholder='Esim. Uusi etusivun teksti';input.maxLength=100;input.required=true;input.setAttribute('aria-label','Version nimi');button.type='submit';form.append(input,button);container.append(form,node('p','Julkaistu sivusto muuttuu vasta Julkaise-painikkeesta.','sui-help'));
+ form.onsubmit=async event=>{event.preventDefault();try{if(!durable())throw new Error('Odota muutosten tallentumista.');await api('/api/checkpoint',{title:input.value,vector:stateVector()});await renderHistory();toast('Versio tallennettu.');}catch(error){toast(error.message);}};
+ for(const version of versions){const {row,open}=versionRow({title:version.title,at:version.createdAt});open.onclick=async()=>{
+  if(!await confirmation('Avataanko yhteinen versio?','Tämä avaa tallennetun työversion kommentteineen molemmille muokkaajille. Nykyinen työversio tallennetaan ensin talteen. Julkaistu sivusto muuttuu vasta julkaisemalla.','Avaa versio'))return;
+  try{await api('/api/restore',{id:version.id,vector:stateVector()});await renderHistory();toast('Versio avattu yhteiseen työversioon.');}catch(error){toast(error.message);}
+ };container.append(row);}
 }
+
 async function renderFieldHistory() {
-  const fieldId = activeField, request = ++historyRequest, container = $('#studio-panel-content');
-  if (!fieldId) { container.replaceChildren(node('p', 'Valitse sivulta otsikko tai tekstikappale, jonka historiaa haluat tarkastella.')); return; }
-  const sameField = historyField === fieldId;
-  const opened = sameField ? new Set([...container.querySelectorAll('details[open]')].map(el => el.dataset.versionId)) : new Set();
-  const comparisons = sameField ? new Map([...container.querySelectorAll('details')].map(el => [el.dataset.versionId, el.querySelector('select')?.value])) : new Map();
-  const scrollTop = $('#studio-sidebar').scrollTop;
-  if (!sameField) container.replaceChildren(node('p', 'Ladataan kohdan historiaa…'));
-  const history = await api(`/api/field-history?fieldId=${encodeURIComponent(fieldId)}`);
-  if (request !== historyRequest || panel !== 'field-history' || activeField !== fieldId) return;
-  historyField = fieldId;
-  const caption = history.current.text.trim().slice(0, 110) || 'Tyhjä tekstikohta';
-  const section = document.querySelector(`[data-studio-field="${CSS.escape(fieldId)}"]`)?.closest('section');
-  const sectionTitle = section?.querySelector('h2, h1')?.textContent.trim() || history.section;
-  container.replaceChildren(node('p', sectionTitle === caption ? 'Valittu tekstikohta' : sectionTitle, 'studio-kicker'), node('h3', caption));
-  container.append(node('p', 'Valitse sivulta toinen tekstikohta nähdäksesi sen historian. Peräkkäinen kirjoittaminen kootaan yhdeksi muutokseksi.'));
-  const refresh = node('button', 'Päivitä historia'); refresh.type = 'button';
-  refresh.onclick = () => renderFieldHistory().catch(error => toast(error.message)); container.append(refresh);
-  const current = node('div', '', 'studio-current-text'); current.append(node('small', 'NYKYINEN TEKSTI'));
-  const currentText = node('div', '', 'studio-history-text'); currentText.innerHTML = history.current.html || '<em>Tyhjä teksti</em>';
-  current.append(currentText); container.append(current);
-  if (!history.entries.length) container.append(node('p', 'Tälle kohdalle ei ole vielä aiempia versioita.'));
-  for (const entry of history.entries) {
-    const item = node('details', '', 'studio-field-version'); item.dataset.versionId = entry.id; item.open = opened.has(entry.id);
-    const summary = node('summary'), date = new Date(entry.updatedAt).toLocaleString('fi-FI');
-    summary.append(node('strong', entry.author?.name || 'Muokkaaja ei tiedossa'), node('small', date),
-      node('span', entry.kind === 'restore' ? 'Tekstin palautus' : entry.kind === 'edit' ? 'Tekstimuutos' : entry.kind === 'layout' ? 'Uuden tekstikohdan luonti' : entry.title || 'Tallennettu versio'));
-    item.append(summary);
-    if (!entry.author) item.append(node('p', 'Tämä teksti on aiemmasta tallennuksesta. Ajankohta kertoo tallennushetken; alkuperäistä muokkaajaa ei ole kirjattu.', 'studio-history-note'));
-    const label = node('label', 'Vertailu', 'studio-compare-label'), comparison = node('select');
-    comparison.setAttribute('aria-label', `Vertailu: ${date}`);
-    if (entry.before) { const option = node('option', 'Muutos edelliseen tekstiin'); option.value = 'previous'; comparison.append(option); }
-    const option = node('option', 'Tästä versiosta nykyiseen'); option.value = 'current'; comparison.append(option);
-    if (comparisons.get(entry.id)) comparison.value = comparisons.get(entry.id);
-    label.append(comparison); item.append(label);
-    const legend = node('p', '', 'studio-diff-legend'); legend.append(node('del', 'Poistettu'), document.createTextNode(' · '), node('ins', 'Lisätty'));
-    const difference = node('div', '', 'studio-text-diff');
-    const compare = () => {
-      const from = comparison.value === 'previous' ? entry.before.text : entry.after.text;
-      const to = comparison.value === 'previous' ? entry.after.text : history.current.text;
-      difference.replaceChildren();
-      if (from === to) difference.append(node('p', 'Sanamuoto on sama. Muotoilu tai linkki voi silti poiketa.'));
-      else for (const part of diffWords(from, to)) difference.append(part.kind === 'same' ? document.createTextNode(part.text) : node(part.kind === 'add' ? 'ins' : 'del', part.text));
-    };
-    comparison.onchange = compare; compare(); item.append(legend, difference, node('h4', 'Tämän version teksti'));
-    const preview = node('div', '', 'studio-history-text'); preview.innerHTML = entry.after.html || '<em>Tyhjä teksti</em>'; item.append(preview);
-    const restore = node('button', entry.after.hash === history.current.hash ? 'Nykyinen teksti' : 'Palauta tämä teksti');
-    restore.type = 'button'; restore.disabled = entry.after.hash === history.current.hash;
-    restore.onclick = async () => {
-      if (!await confirmation('Palautetaanko tämän kohdan teksti?', 'Vain tämä tekstikohta palautetaan. Muut tekstit ja kommentit säilyvät. Myös korvattava teksti jää kohdan historiaan.', 'Palauta teksti')) return;
-      try {
-        if (!durable()) throw new Error('Odota muutosten tallentumista ennen palauttamista.');
-        await api('/api/field-restore', { fieldId, id: entry.id, expectedHash: history.current.hash, versionHash: entry.after.hash });
-        toast('Tekstikohta palautettu yhteiseen työversioon.'); await renderFieldHistory();
-      } catch (error) { toast(error.message); }
-    };
-    item.append(restore); container.append(item);
-  }
-  if (sameField) $('#studio-sidebar').scrollTop = scrollTop;
+ const fieldId=activeField,request=++historyRequest,container=$('#studio-panel-content');
+ if(!fieldId){container.replaceChildren(node('p','Klikkaa sivun tekstiä. Sen muutokset ja aiemmat versiot näkyvät tässä.','sui-help'));return;}
+ const history=await api(`/api/field-history?fieldId=${encodeURIComponent(fieldId)}`);
+ if(request!==historyRequest||panel!=='field-history'||activeField!==fieldId)return;
+ historyField=fieldId;
+ const seen=new Set([history.current.hash]),entries=[];
+ for(const entry of history.entries){if(seen.has(entry.after.hash))continue;seen.add(entry.after.hash);entries.push({id:entry.id,at:entry.updatedAt,text:entry.after.text,hash:entry.after.hash});}
+ const at=history.entries.find(entry=>entry.after.hash===history.current.hash)?.updatedAt||null;
+ timeline({container,current:{text:history.current.text,at},entries,restore:async entry=>{
+  try{if(!durable())throw new Error('Odota muutosten tallentumista.');await api('/api/field-restore',{fieldId,id:entry.id,expectedHash:history.current.hash,versionHash:entry.hash});toast('Teksti palautettu yhteiseen työversioon.');await renderFieldHistory();}catch(error){toast(error.message);}
+ }});
 }
+
 function registerTools() {
   if (typeof document.modelContext?.registerTool !== 'function') return;
   const tool = (name, description, properties, required, execute, readOnly = false, untrusted = false) => document.modelContext.registerTool({
@@ -522,18 +451,19 @@ async function initialize() {
     connectSession();
     provider.awareness.on('change', renderPeople);
     doc.on('update', () => {
-      applyPendingLayout(); status(); picker.refresh();
+      applyPendingLayout(); status(); picker.refresh(); composer.refresh();
       if (panel === 'archive') { clearTimeout(archiveTimer); archiveTimer = setTimeout(renderArchive, 150); }
     });
     setInterval(() => {
       if (connected && !refreshingLayout && layout?.layoutHash !== doc.getMap('meta').get('layoutHash')) refreshLayout();
       applyPendingLayout();
     }, 1500);
-    if (session.development) { $('.studio-bar').classList.add('studio-local'); $('.studio-brand span').textContent = `${session.user.name} · paikallinen kokeilu`;
+    if (session.development) { $('.studio-bar').classList.add('studio-local'); $('.studio-brand span').textContent = 'Paikallinen kokeilu';
       $('#studio-publish').textContent = 'Lataa sivu'; }
     setInterval(renewSession, 5 * 60 * 1000);
     await refreshLayout();
     await mediaMode.refresh();
+    await refreshLanguages();
   } catch (error) {
     sessionFailure(error);
   }
@@ -558,21 +488,19 @@ $('#studio-logout').onclick = async () => {
     if (!$('#studio-gate').open) $('#studio-gate').showModal();
   } catch (error) { toast(connectionMessage(error)); }
 };
-function setAnnotationMode(value) {
-  if (composing) { toast('Viimeistele keskeneräinen kirjoitus ennen kommentointitilaa.'); return; }
-  if (value) mediaMode.setEnabled(false);
-  annotating = value; picker.setEnabled(value); editors.forEach(editor => editor.setEditable(editing && !value && !mediaMode.enabled));
-  $('#studio-annotate').setAttribute('aria-pressed', String(value)); $('#studio-annotate').textContent = value ? 'Lopeta kommentointi' : 'Kommentoi aluetta';
-  if (value) showPanel('comments');
+function setWorkspaceMode(value) {
+ if(composing)return toast('Viimeistele keskeneräinen kirjoitus ennen työtilan vaihtamista.');
+ workspaceMode=value;editing=value==='edit';annotating=value==='ai';workspace.setMode(value);picker.setEnabled(annotating);if(!annotating)composer.close();
+ editors.forEach(editor=>editor.setEditable(editing));document.body.classList.toggle('studio-editing',editing);
+ $('#studio-mode').textContent=value==='preview'?'Takaisin muokkaukseen':'Esikatsele';$('#studio-mode').setAttribute('aria-pressed',String(value==='preview'));
+ if(value==='images')showPanel('images');else if(value==='ai')showPanel('comments');else {mediaMode.setEnabled(false);if(value==='edit')showPanel('field-history');}
 }
-$('#studio-annotate').onclick = () => setAnnotationMode(!annotating);
-$('#studio-images').onclick = () => { if (!session) return toast('Kirjaudu ensin Studioon.'); setAnnotationMode(false); if (mediaMode.enabled) $('#studio-close').click(); else showPanel('images'); };
-$('#studio-mode').onclick = () => { setAnnotationMode(false); editing = !editing; editors.forEach(editor => editor.setEditable(editing));
-  if (mediaMode.enabled) $('#studio-close').click();
-  document.body.classList.toggle('studio-editing', editing); $('#studio-mode').textContent = editing ? 'Esikatsele' : 'Muokkaa tekstejä'; };
-$('#studio-undo').onclick = () => editors.get(activeField)?.commands.undo();
-$('#studio-redo').onclick = () => editors.get(activeField)?.commands.redo();
-$('#studio-comments').onclick = () => showPanel('comments'); $('#studio-history').onclick = () => showPanel('history');
+function setAnnotationMode(value){setWorkspaceMode(value?'ai':'edit');}
+$('#studio-edit').onclick=()=>setWorkspaceMode('edit');$('#studio-ai').onclick=()=>setWorkspaceMode('ai');$('#studio-annotate').onclick=()=>setWorkspaceMode('ai');
+$('#studio-images').onclick=()=>{if(!session)return toast('Kirjaudu ensin Studioon.');setWorkspaceMode('images');};
+$('#studio-mode').onclick=()=>setWorkspaceMode(workspaceMode==='preview'?'edit':'preview');
+$('#studio-undo').onclick=()=>editors.get(activeField)?.commands.undo();$('#studio-redo').onclick=()=>editors.get(activeField)?.commands.redo();
+$('#studio-comments').onclick=()=>setWorkspaceMode('ai');$('#studio-history').onclick=()=>showPanel(panel==='history'?({edit:'field-history',images:'images',ai:'comments'}[workspaceMode]||'field-history'):'history');
 $('#studio-archive').onclick = () => showPanel('archive');
 $('#studio-archive-close').onclick = () => {
   if (!durable()) { toast('Odota tekstin tallentumista ennen sulkemista.'); return; }
@@ -581,14 +509,26 @@ $('#studio-archive-close').onclick = () => {
   dock.hidden = true;
 };
 $('#studio-field-history').onclick = () => showPanel('field-history');
-if ($('#studio-language')) $('#studio-language').onchange = event => {
-  if (mounted && (!durable() || commentDraft.trim())) {
-    event.target.value = language;
-    return toast('Odota tekstien tallennusta ja tallenna keskeneräinen kommentti ennen kielen vaihtamista.');
-  }
-  location.href = sitePath(event.target.value === 'en' ? 'en/studio/' : 'studio/');
+async function refreshLanguages(){
+ const result=await api('/api/languages');availableLanguages=result.languages;
+ document.title=`Althea Studio — ${labelForLanguage(language)}`;$('#studio-canvas-label').textContent=`${labelForLanguage(language)} · yhteinen työversio`;
+ const select=$('#studio-language');select.replaceChildren();for(const item of availableLanguages){const option=new Option(item.name+(item.draft?' · Luonnos':''),item.code);option.selected=item.code===language;select.append(option);}if(availableLanguages.length<8)select.append(new Option('Lisää kieli…','add'));
+}
+$('#studio-language').onchange=event=>{
+ const value=event.target.value;event.target.value=language;
+ if(mounted&&(!durable()||commentDraft.trim()))return toast('Odota tekstien tallennusta ja tallenna keskeneräinen kommentti ennen kielen vaihtamista.');
+ if(value==='add'){
+  const select=$('#studio-new-language');select.replaceChildren();for(const item of LANGUAGE_OPTIONS.filter(item=>!availableLanguages.some(lang=>lang.code===item.code)))select.append(new Option(item.name,item.code));
+  $('#studio-language-note').textContent=`Sisältö kopioidaan kieliversiosta ${labelForLanguage(language)}. Sen sisällöt säilyvät ennallaan.`;$('#studio-language-error').hidden=true;$('#studio-language-dialog').showModal();return;
+ }
+ location.href=sitePath(value==='fi'?'studio/':value==='en'?'en/studio/':`studio/?lang=${value}`);
 };
-$('#studio-close').onclick = () => { mediaMode.setEnabled(false); setAnnotationMode(false); picker.clear(); panel = null; clearTimeout(historyTimer); $('#studio-sidebar').hidden = true; document.body.classList.remove('studio-panel-open', 'studio-field-history-open', 'studio-images-open'); };
+$('#studio-language-cancel').onclick=()=>$('#studio-language-dialog').close();
+$('#studio-language-form').onsubmit=async event=>{event.preventDefault();const button=$('#studio-language-create');button.disabled=true;try{
+ if(!durable())throw new Error('Odota muutosten tallentumista.');const code=$('#studio-new-language').value;await api('/api/add-language',{code,vector:stateVector()});
+ location.href=sitePath(`studio/?lang=${code}`);
+}catch(error){$('#studio-language-error').textContent=error.message;$('#studio-language-error').hidden=false;}finally{button.disabled=false;}};
+$('#studio-close').onclick=()=>workspace.inspector.set(!workspace.inspector.collapsed);
 $('#studio-publish').disabled = true;
 $('#studio-publish').onclick = async () => {
   try {
@@ -599,10 +539,10 @@ $('#studio-publish').onclick = async () => {
       link.href = url; link.download = 'althea-yhteinen-versio.html'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
       toast('Yhteinen sivu ladattu tiedostoksi.'); return;
     }
-    if (!await confirmation(`Julkaistaanko ${languageName} työversio?`, `Molempien muokkaajien tämänhetkiset tekstit julkaistaan osoitteeseen www.althea.fi/${language === 'en' ? 'en/' : ''}. Versio tallennetaan tämän kielen historiaan.`, language === 'en' ? 'Julkaise englanti' : 'Julkaise suomi')) return;
+    if (!await confirmation(`Julkaistaanko ${languageName} työversio?`, `Molempien muokkaajien tämänhetkiset tekstit julkaistaan osoitteeseen www.althea.fi/${language === 'fi' ? '' : language+'/'}. Versio tallennetaan tämän kielen historiaan.`, 'Julkaise kieliversio')) return;
     $('#studio-publish').disabled = true;
     const result = await api('/api/studio-publish', { vector: stateVector(), layoutHash: layout.layoutHash });
-    toast(result.unchanged ? 'Sivusto on jo ajan tasalla.' : `${language === 'en' ? 'Englanninkielinen' : 'Suomenkielinen'} sivu julkaistu. Sivusto päivittyy hetken kuluttua.`); status();
+    toast(result.unchanged ? 'Sivusto on jo ajan tasalla.' : `${labelForLanguage(language)} julkaistu. Sivusto päivittyy hetken kuluttua.`); status();
   } catch (error) { toast(error.message); status(); }
 };
 // Layout updates replace the form; keep email delivery disabled inside Studio.

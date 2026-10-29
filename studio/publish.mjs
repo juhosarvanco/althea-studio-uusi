@@ -1,7 +1,8 @@
+import {validLanguage,languageName} from '../vendor/studio-ui/languages.mjs';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { writeFile, rename } from 'node:fs/promises';
-import { join } from 'node:path';
+import { writeFile, rename, mkdir } from 'node:fs/promises';
+import { join, dirname } from 'node:path';
 import { prepareTemplate } from './template.mjs';
 import { vector } from './store.mjs';
 
@@ -24,10 +25,10 @@ export function githubRequest(path, body, method = body ? 'POST' : 'GET') {
 }
 
 export class GithubPublisher {
-  constructor({ store, media, site, language = 'fi', request = githubRequest }) {
-    if (!['fi', 'en'].includes(language)) throw new Error('Unsupported publication language');
+  constructor({ store, media, site, language = 'fi', request = githubRequest, canCreate=()=>false, onPublished=()=>{} }) {
+    if (!validLanguage(language)) throw new Error('Unsupported publication language');
     this.store = store; this.media = media; this.site = site; this.request = request; this.busy = false;
-    this.language = language; this.page = language === 'en' ? 'en/index.html' : 'index.html';
+    this.language=language;this.page=language==='fi'?'index.html':`${language}/index.html`;this.canCreate=canCreate;this.onPublished=onPublished;
   }
   async publish(body, actor) {
     if (this.busy) fail('Julkaisu on jo käynnissä. Odota hetki.', 409);
@@ -39,13 +40,19 @@ export class GithubPublisher {
     try {
       const prefix = `/repos/${REPOSITORY}`, branch = 'main';
       const reference = await this.request(`${prefix}/git/ref/heads/${branch}`), parent = reference.object.sha;
-      const file = await this.request(`${prefix}/contents/site/${this.page}?ref=${parent}`);
-      if (file.encoding !== 'base64' || digest(Buffer.from(file.content.replace(/\n/g, ''), 'base64')) !== snapshot.publicHash)
+      let file,commit;
+      if(this.canCreate()){
+        commit=await this.request(`${prefix}/git/commits/${parent}`);
+        const tree=await this.request(`${prefix}/git/trees/${commit.tree.sha}?recursive=1`);
+        if(tree.truncated)fail('Julkaisun tiedostoluettelo on liian suuri tarkistettavaksi.',422);
+        if(tree.tree.some(item=>item.path===`site/${this.page}`))file=await this.request(`${prefix}/contents/site/${this.page}?ref=${parent}`);
+      }else file=await this.request(`${prefix}/contents/site/${this.page}?ref=${parent}`);
+      if (file && (file.encoding !== 'base64' || digest(Buffer.from(file.content.replace(/\n/g, ''), 'base64')) !== snapshot.publicHash))
         fail('Sivustoa muutettiin GitHubissa Studion ulkopuolella. Työversio säilyy; yhdistä muutokset ennen julkaisua.', 409);
       const htmlHash = digest(snapshot.html);
-      if (htmlHash === snapshot.publicHash) return { unchanged: true, baselineUpdated: true };
+      if (file && htmlHash === snapshot.publicHash) {this.onPublished();return { unchanged: true, baselineUpdated: true };}
       const assets = this.media.publicationAssets(snapshot.html);
-      const commit = await this.request(`${prefix}/git/commits/${parent}`);
+      commit ||= await this.request(`${prefix}/git/commits/${parent}`);
       const tree = [{ path: `site/${this.page}`, mode: '100644', type: 'blob', content: snapshot.html }];
       for (const asset of assets) {
         if (!/^assets\/img\/studio-[a-f0-9]{64}\.webp$/.test(asset.path) || digest(Buffer.from(asset.content, 'base64')) !== asset.digest)
@@ -55,19 +62,21 @@ export class GithubPublisher {
       }
       const nextTree = await this.request(`${prefix}/git/trees`, { base_tree: commit.tree.sha, tree });
       const nextCommit = await this.request(`${prefix}/git/commits`, {
-        message: `Studion ${this.language === 'en' ? 'englanninkielisen' : 'suomenkielisen'} työversion julkaisu (${actor.sub})`, tree: nextTree.sha, parents: [parent],
+        message: `Studion ${languageName(this.language)}-työversion julkaisu (${actor.sub})`, tree: nextTree.sha, parents: [parent],
         author: { name: actor.name, email: `${actor.sub}@users.noreply.github.com` } });
       // A concurrent commit cannot be overwritten: never force-advance the branch.
       await this.request(`${prefix}/git/refs/heads/${branch}`, { sha: nextCommit.sha, force: false }, 'PATCH');
       this.store.published(snapshot.publicHash, htmlHash);
       this.store.checkpoint('Julkaistu GitHub Pagesiin', actor.name);
       // Keep the local bootstrap in step with publications for future restarts.
+      await mkdir(dirname(join(this.site,this.page)),{recursive:true});
       await writeFile(join(this.site, this.page + '.next'), snapshot.html);
       await rename(join(this.site, this.page + '.next'), join(this.site, this.page));
       for (const asset of assets) {
         const target = join(this.site, asset.path); await writeFile(target + '.next', Buffer.from(asset.content, 'base64')); await rename(target + '.next', target);
       }
-      return { baselineUpdated: true, commit: `https://github.com/${REPOSITORY}/commit/${nextCommit.sha}`, website: `https://www.althea.fi/${this.language === 'en' ? 'en/' : ''}` };
+      this.onPublished();
+      return { baselineUpdated: true, commit: `https://github.com/${REPOSITORY}/commit/${nextCommit.sha}`, website: `https://www.althea.fi/${this.language==='fi'?'':this.language+'/'}` };
     } finally { this.busy = false; }
   }
 }

@@ -7,3 +7,5 @@ site/studio/
 site/en/studio/
 *.log
 .DS_Store
+
+site/*/studio/

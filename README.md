@@ -15,9 +15,9 @@ Sivulla ei ole kielenvaihtopainikkeita, eikä suomenkieliseltä sivulta ole siih
 Hakukoneindeksointi on estetty tarkistuksen ajaksi.
 
 Englantia muokataan osoitteessa https://www.althea.fi/en/studio/. Studion
-**Muokattava kieli** -valikosta voi vaihtaa suomen ja englannin välillä.
+**Sivuston kieli** -valikosta voi vaihtaa suomen ja englannin välillä.
 Kummallakin kielellä on oma yhteinen työversio, kommentit, kuvapankki ja historia.
-**Julkaise suomi** päivittää vain etusivun ja **Julkaise englanti** vain `/en/`-sivun.
+**Julkaise** päivittää vain valitun kielen sivun.
 Suomenkieliset muutokset eivät käänny automaattisesti. Sama kirjautuminen toimii
 molemmissa editoreissa. Molemmat sivut käyttävät samaa julkaistua kuvastoa ja
 yhteydenottolomakkeen vastaanottajaa. Lomakkeen viestit ja tietotekstit valitaan sivun
@@ -55,11 +55,11 @@ Klikkaa otsikkoa tai tekstikappaletta ja kirjoita. Muutokset välittyvät heti t
 **Tallennettu yhteiseen versioon** kertoo, että palvelin on tallentanut muutokset.
 Kirjoittaminen ei vielä muuta julkista sivua.
 
-- **Kommentoi aluetta** valitsee tekstin, katkelman, kuvan, painikkeen tai kokonaisen alueen.
-  Sivupaneelista voi vaihtaa valinnan tasoa. Kommentit näkyvät molemmille.
+- **Tekoäly** valitsee tekstin, katkelman, kuvan, painikkeen tai kokonaisen alueen.
+  Kommenttikentän valikosta voi vaihtaa valinnan tasoa. Kommentit näkyvät molemmille.
 - **Kuvat** avaa yhteisen kuvapankin. Voit lisätä kuvia ja valita niitä taustoihin tai
   sivun kuviin. Henkilökuville on omat paikat. Kuvan vaihto säilyttää tekstit ja kommentit.
-- **Kohdan historia** näyttää valitun tekstin muutokset ja mahdollistaa sen palauttamisen.
+- **Muokkaa** näyttää valitun tekstin historian ja mahdollistaa palauttamisen.
 - **Versiot** tallentaa nimetyn version ja näyttää automaattiset versiot.
 - **Esikatsele** näyttää sivun ilman kirjoitustilaa.
 - **Julkaise** julkaisee yhteisen työversion vain tähän uuteen repoon.
@@ -228,3 +228,37 @@ Tarkistus kokeilee ulkopuolisen luku- ja muokkausyrityksiä ilman oikeita tunnuk
 tai kelvollista julkaisuversiota. GitHubin käsin käynnistettävä yhteystarkistus
 suorittaa saman kokeen ulkoverkosta. Tarkistus ei takaa ehdotonta turvallisuutta:
 GitHub-, Netlify- ja verkkotunnustilien sekä Macin suojaaminen on edelleen välttämätöntä.
+
+## Yhteinen Studio-käyttöliittymä (0.1.0)
+
+Althean Studio käyttää samaa versioitua käyttöliittymäpakettia kuin 100HRS.
+`vendor/studio-ui/origin.json` kertoo paketin tarkan lähdecommitin ja tiedostojen
+tarkistussummat. Päivitys tehdään erikseen komennolla
+`node tools/sync-studio-ui.mjs <100hrs-repon-40-merkkinen-commit>` ja tarkistetaan
+`npm run build` sekä `npm test`. Rakentaminen ja palvelimen käynnistys eivät lataa
+uutta pakettia verkosta.
+
+- **Muokkaa**: kirjoita suoraan sivulle. Vasemmalla näkyy vain valitun tekstin
+  nykyinen versio ja muutoshistoria palautuksineen.
+- **Kuvat**: lataa kuvia kirjastoon, valitse sivun kuvakohta ja käytettävä kuva.
+  Kuvan kuvaus ja rajaus ovat Kuvan asetukset -kohdassa. Poistot voi palauttaa.
+- **Tekoäly**: valitse teksti, kuva tai laajempi alue ja kirjoita kommentti sen
+  viereen avautuvaan kenttään. Kohdetason voi vaihtaa kentän ylävalikosta.
+  Kommentit näkyvät yhteisessä sivupaneelissa. Tekoälypalvelun API-yhteyttä ei
+  vielä ole: krediittisaldo on yhdistämättä ja Toteuta muutokset on pois käytöstä.
+  Tehdyt muutokset -välilehdellä ei näytetä käsin tehtyjä muokkauksia.
+- **Versiot** avaa saman levyisen sivupaneelin. Nimetty versio tallennetaan
+  kentästä ja Avaa versio palauttaa sen yhteiseen työversioon. Julkinen sivu
+  muuttuu vasta Julkaise-painikkeesta.
+- Paneelin oikean reunan painike piilottaa ja avaa paneelin. Valinta muistetaan
+  tässä selaimessa. Peru/uudelleen säilyttää yhteismuokkauksen oman käyttäjän rajauksen.
+
+**Sivuston kieli** -valikosta voi vaihtaa nykyistä kieltä tai lisätä uuden.
+Suomen ja englannin osoitteet ja tallennuskansiot säilyvät ennallaan. Uusi kieli
+kopioidaan valitun kielen tämänhetkisestä työversiosta; käännöstä ei tehdä
+itsestään. Uusi kieli avautuu esimerkiksi `/studio/?lang=sv`-osoitteessa,
+ja julkaisu luo `/sv/`-sivun. Kielikohtaiset kommentit ja historia eivät kopioidu.
+Enintään kahdeksan kieliversion rekisteri on yksityisessä
+`.studio-live/data/languages.json`-tiedostossa. Lisäkielten tiedot säilyvät omissa
+alikansioissaan. Althean Yjs-tallennus, GitHub-kirjautuminen, yhteismuokkaus ja
+julkaisun ristiriitatarkistukset ovat edelleen Althean omassa palvelimessa.

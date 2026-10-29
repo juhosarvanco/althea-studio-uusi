@@ -1,3 +1,4 @@
+import {validLanguage} from '../vendor/studio-ui/languages.mjs';
 import { studioAddress } from '../shared/studio-address.mjs';
 export const SITE_BASE = '/althea-studio-uusi/';
 
@@ -12,15 +13,17 @@ export function sitePath(path = '') {
 }
 
 export function studioLanguage() {
-  return /\/(?:en)\/studio(?:\/|$)/.test(location.pathname || '') ? 'en' : 'fi';
+  const requested=new URLSearchParams(location.search||'').get('lang');
+  const pathLanguage=(location.pathname||'').match(/\/([a-z]{2})\/studio(?:\/|$)/)?.[1];
+  return requested&&validLanguage(requested)?requested:validLanguage(pathLanguage)?pathLanguage:'fi';
 }
 
 export function contentPath(path, language = studioLanguage()) {
-  if (!['fi', 'en'].includes(language) || !path.startsWith('/api/')) throw new Error('Invalid Studio content path');
-  return language === 'en' ? path.replace('/api/', '/api/en/') : path;
+  if (!validLanguage(language) || !path.startsWith('/api/')) throw new Error('Invalid Studio content path');
+  return language === 'fi' ? path : path.replace('/api/', `/api/${language}/`);
 }
 
-export const studioRoom = (language = studioLanguage()) => language === 'en' ? 'althea-uusi-en' : 'althea-uusi';
+export const studioRoom = (language = studioLanguage()) => language === 'fi' ? 'althea-uusi' : `althea-uusi-${language}`;
 
 let configuration;
 export async function studioConfiguration({ refresh = false } = {}) {
