@@ -149,3 +149,16 @@ test('new language drafts copy the current content safely and retain independent
 test('query-selected languages use isolated API and websocket rooms',()=>{
  const before=globalThis.location;try{globalThis.location={pathname:'/studio/',search:'?lang=sv'};assert.equal(studioLanguage(),'sv');assert.equal(contentPath('/api/layout'),'/api/sv/layout');assert.equal(studioRoom(),'althea-uusi-sv');}finally{globalThis.location=before;}
 });
+
+test('each editor asset URL identifies the exact built bytes to prevent mixed cached releases',async()=>{
+ const {createHash}=await import('node:crypto');
+ for(const prefix of ['','en/']){
+  const {document}=parseHTML(await readFile(new URL(`../../site/${prefix}studio/index.html`,import.meta.url),'utf8'));
+  for(const name of ['client.js','studio.css','ui.css','workspace.css']){
+   const element=document.querySelector(name.endsWith('.js')?'script[src*="studio/client.js"]':`link[href*="studio/${name}"]`);
+   const url=element.getAttribute(name.endsWith('.js')?'src':'href');
+   const bytes=await readFile(new URL(`../../site/studio/${name}`,import.meta.url));
+   assert.equal(url.split('?v=')[1],createHash('sha256').update(bytes).digest('hex').slice(0,16));
+  }
+ }
+});

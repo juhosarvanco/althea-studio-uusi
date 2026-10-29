@@ -1,6 +1,7 @@
 import {validLanguage,languageName} from '../vendor/studio-ui/languages.mjs';
 import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises';
 import { build } from 'esbuild';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { join, dirname } from 'node:path';
 import { prepareTemplate } from '../studio/template.mjs';
@@ -27,6 +28,12 @@ await build({ entryPoints: [join(root, 'tools/public-app.js')], bundle: true, fo
 // Relative links work both under the repository path and on the custom domain.
 const base = process.env.STUDIO_BASE_PATH || '../';
 if (!/^\/[a-zA-Z0-9_/-]*\/$/.test(base) && !['/', '../'].includes(base)) throw new Error('Invalid site base path');
+// Fingerprinted URLs keep a cached old editor bundle from running against new chrome.
+const studioDirectory=join(root,'site/studio');await mkdir(studioDirectory,{recursive:true});
+await build({entryPoints:[join(root,'studio/client.js')],bundle:true,format:'esm',minify:true,outfile:join(studioDirectory,'client.js'),target:['es2022']});
+const studioAssets={'client.js':await readFile(join(studioDirectory,'client.js')),'studio.css':await readFile(join(root,'studio/studio.css')),'ui.css':await readFile(join(root,'vendor/studio-ui/ui.css')),'workspace.css':await readFile(join(root,'studio/workspace.css'))};
+const assetURL=(name,prefix)=>prefix+'studio/'+name+'?v='+createHash('sha256').update(studioAssets[name]).digest('hex').slice(0,16);
+for(const [name,bytes] of Object.entries(studioAssets))if(name!=='client.js')await writeFile(join(studioDirectory,name),bytes);
 const extras=(await readdir(join(root,'site'),{withFileTypes:true})).filter(item=>item.isDirectory()&&validLanguage(item.name)&&!['fi','en'].includes(item.name)).map(item=>item.name);
 for (const language of ['fi','en',...extras]) {
   const page = language==='fi'?'':language+'/';
@@ -53,8 +60,8 @@ for (const language of ['fi','en',...extras]) {
   const referrer = document.createElement('meta'); referrer.name = 'referrer'; referrer.content = 'no-referrer'; document.head.append(referrer);
   document.querySelectorAll('head style').forEach(el => el.setAttribute('data-studio-site-style', ''));
   const robots = document.createElement('meta'); robots.name = 'robots'; robots.content = 'noindex, nofollow'; document.head.append(robots);
-  const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = editorBase + 'studio/studio.css'; document.head.append(css);
-  for(const path of ['studio/ui.css','studio/workspace.css']){const css=document.createElement('link');css.rel='stylesheet';css.href=editorBase+path;document.head.append(css);}
+  const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = assetURL('studio.css',editorBase); document.head.append(css);
+  for(const path of ['ui.css','workspace.css']){const css=document.createElement('link');css.rel='stylesheet';css.href=assetURL(path,editorBase);document.head.append(css);}
   document.body.insertAdjacentHTML('beforeend', await readFile(join(root, 'studio/chrome.html'), 'utf8'));
   document.querySelector('.studio-brand span').textContent = 'Studio';
   document.querySelector('#studio-canvas-label').textContent = `${languageName(language)} · yhteinen työversio`;
@@ -64,7 +71,7 @@ for (const language of ['fi','en',...extras]) {
   document.querySelector(`#studio-language option[value="${language}"]`).setAttribute('selected','');
   // The language selector identifies the publication target; keep the button compact.
   document.querySelector('.studio-back').setAttribute('href', '../');
-  const script = document.createElement('script'); script.type = 'module'; script.src = editorBase + 'studio/client.js'; document.body.append(script);
+  const script = document.createElement('script'); script.type = 'module'; script.src = assetURL('client.js',editorBase); document.body.append(script);
   const directory = join(root, `site/${page}studio`);
   await mkdir(directory, { recursive: true });
   await writeFile(join(directory, 'index.html'), '<!doctype html>\n' + document.documentElement.outerHTML);
@@ -72,10 +79,4 @@ for (const language of ['fi','en',...extras]) {
   await writeFile(join(directory, 'manifest.json'), JSON.stringify(manifest));
   console.log(`Studio built (${language}): ${manifest.fields.length} shared text fields.`);
 }
-await writeFile(join(root, 'site/studio/studio.css'), await readFile(join(root, 'studio/studio.css')));
 await writeFile(join(root, 'site/studio/config.json'), JSON.stringify({ server: process.env.STUDIO_SERVER_URL || 'http://127.0.0.1:8796', ...(relay ? { relay } : {}) }) + '\n');
-await build({ entryPoints: [join(root, 'studio/client.js')], bundle: true, format: 'esm', minify: true,
-  outfile: join(root, 'site/studio/client.js'), target: ['es2022'] });
-
-await writeFile(join(root,'site/studio/ui.css'),await readFile(join(root,'vendor/studio-ui/ui.css')));
-await writeFile(join(root,'site/studio/workspace.css'),await readFile(join(root,'studio/workspace.css')));
